@@ -163,6 +163,13 @@ export function toResponsesInput(
 
 /**
  * Map harness tool schemas to Responses function tools.
+ *
+ * `strict` is sent as `false` explicitly: the Responses API defaults function
+ * tools to strict mode, which demands every property be emitted on every call.
+ * Harness schemas mark optional fields by omitting them from `required` (and
+ * never as nullable), so under strict mode the model fills them all — e.g. a
+ * bash call carrying `sandbox_permissions` with no denial to justify it, which
+ * the harness rejects before anything runs.
  * @param tools - tool schemas from the request.
  * @returns Responses `tools` array entries.
  */
@@ -172,6 +179,7 @@ export function toResponsesTools(tools: readonly ToolSchema[]): Record<string, u
     name: tool.name,
     description: tool.description,
     parameters: tool.parameters,
+    strict: false,
   }))
 }
 
