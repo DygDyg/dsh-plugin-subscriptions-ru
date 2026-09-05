@@ -24,6 +24,29 @@ const STATIC_CODEX = [{ id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex' }]
 const STATIC_CLAUDE = [{ id: 'claude-opus-4-5', name: 'Claude Opus 4.5' }]
 const STATIC_GROK = [{ id: 'grok-4', name: 'Grok 4' }]
 
+test('Codex context overrides clamp per account, restore defaults, and distrust missing maxima', async () => {
+  let requested: number | undefined = 512_000
+  const sessions = {
+    pro: { accessToken: 'pro', refreshToken: 'r', accountId: 'pro', expiresAt: Date.now() + 3600000 },
+    plus: { accessToken: 'plus', refreshToken: 'r', accountId: 'plus', expiresAt: Date.now() + 3600000 },
+  }
+  const adapter = new CodexAdapter({
+    models: [], discovery: true, tokens: memoryAccounts(sessions), streamIdleTimeoutMs: 1000,
+    contextWindowOf: () => requested,
+    fetchFn: (async (_url, init) => new Response(JSON.stringify({ models: [
+      { slug: 'm', context_window: 272000, max_context_window: new Headers(init?.headers).get('chatgpt-account-id') === 'pro' ? 872000 : 300000 },
+      { slug: 'unknown-max', context_window: 272000 },
+    ] }))) as FetchFn,
+  })
+  assert.equal((await adapter.resolveOwnModel('codex', 'm', 'pro')).context?.contextWindow, 512000)
+  assert.equal((await adapter.resolveOwnModel('codex', 'm', 'plus')).context?.contextWindow, 300000)
+  assert.equal((await adapter.resolveOwnModel('codex', 'unknown-max', 'pro')).context?.contextWindow, 272000)
+  requested = undefined
+  assert.equal((await adapter.resolveOwnModel('codex', 'm', 'pro')).context?.contextWindow, 272000)
+  requested = 128000
+  assert.equal((await adapter.resolveOwnModel('codex', 'm', 'pro')).context?.contextWindow, 128000)
+})
+
 const codexSession: CodexSession = {
   accessToken: 'at',
   refreshToken: 'rt',

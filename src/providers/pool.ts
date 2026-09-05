@@ -192,25 +192,25 @@ export class PoolAdapter extends LlmAdapter {
    * capabilities: the smallest context window and output cap, the reasoning
    * efforts every member supports, and the modalities all of them accept —
    * so a request valid for the pool stays valid after a failover. Capability
-   * metadata is provider-level, so each provider resolves once regardless of
-   * how many accounts it pools.
+   * metadata is account-specific, so every distinct member is resolved.
    */
   override async resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     const definition = (await this.pools()).get(poolKey(provider, model))
     if (definition === undefined) throw new LlmError(`unknown pool model "${model}"`, 'NO_ADAPTER')
     const resolved: LlmResolvedModelInfo[] = []
     let lastFailure: unknown
-    const seenProviders = new Set<ProviderId>()
+    const seenMembers = new Set<string>()
     for (const member of definition.members) {
-      if (seenProviders.has(member.provider)) continue
-      seenProviders.add(member.provider)
+      const identity = JSON.stringify([member.provider, member.model, member.account])
+      if (seenMembers.has(identity)) continue
+      seenMembers.add(identity)
       const adapter = this.options.adapters[member.provider]
       if (adapter === undefined) continue
       // Tolerate per-member failures (a misconfigured tier member, a
       // logged-out provider throwing AUTH): the pool serves as long as ONE
       // member resolves, mirroring stream()'s failover semantics.
       try {
-        resolved.push(await adapter.resolveOwnModel(member.provider, member.model))
+        resolved.push(await adapter.resolveOwnModel(member.provider, member.model, member.account))
       } catch (error: unknown) {
         lastFailure = error
         this.warnOnce(

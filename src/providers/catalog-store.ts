@@ -68,6 +68,8 @@ function sanitizeModel(value: unknown): DiscoveredModel | undefined {
     || (raw.description !== undefined && typeof raw.description !== 'string')
     || (raw.contextWindow !== undefined
       && (typeof raw.contextWindow !== 'number' || !Number.isInteger(raw.contextWindow) || raw.contextWindow <= 0))
+    || (raw.maxContextWindow !== undefined
+      && (typeof raw.maxContextWindow !== 'number' || !Number.isSafeInteger(raw.maxContextWindow) || raw.maxContextWindow <= 0))
     || (raw.priority !== undefined
       && (typeof raw.priority !== 'number' || !Number.isFinite(raw.priority)))) return undefined
   const reasoning = raw.reasoning === undefined ? undefined : sanitizeReasoning(raw.reasoning)
@@ -91,6 +93,7 @@ function sanitizeModel(value: unknown): DiscoveredModel | undefined {
     name: raw.name,
     ...raw.description === undefined ? {} : { description: raw.description as string },
     ...raw.contextWindow === undefined ? {} : { contextWindow: raw.contextWindow as number },
+    ...raw.maxContextWindow === undefined ? {} : { maxContextWindow: raw.maxContextWindow as number },
     ...raw.priority === undefined ? {} : { priority: raw.priority as number },
     ...reasoning === undefined ? {} : { reasoning },
     ...thinkingType === undefined ? {} : { thinkingType: thinkingType as 'enabled' | 'adaptive' },

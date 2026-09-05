@@ -112,6 +112,11 @@ export interface ModelDefaultsCatalog {
 }
 
 /** Default-effort picker operations behind the `modelDefaults/setModelDefault` endpoints. */
+export interface ProviderSettingsController {
+  get(provider: ProviderId, force: boolean): Promise<unknown>
+  set(provider: ProviderId, settings: unknown): Promise<void>
+}
+
 export interface ModelDefaultsController {
   /** Per-provider picker state for the Settings page. */
   catalog(force?: boolean): Promise<ModelDefaultsCatalog[]>
@@ -406,8 +411,18 @@ async function dispatch(
   endpoint: string,
   payload: unknown,
   signal: AbortSignal,
+  providerSettings?: ProviderSettingsController,
 ): Promise<RpcResult<unknown>> {
   switch (endpoint) {
+    case 'providerSettings':
+      if (!providerSettings) throw new BadRequest('provider settings are unavailable')
+      return ok(await providerSettings.get(readProvider(payload), readForce(payload)))
+    case 'setProviderSettings': {
+      if (!providerSettings) throw new BadRequest('provider settings are unavailable')
+      const provider = readProvider(payload)
+      await providerSettings.set(provider, (payload as Record<string, unknown>).settings)
+      return ok({ ok: true })
+    }
     case 'status': {
       const entries = await Promise.all(PROVIDER_IDS.map(
         async provider => [provider, await controller.status(provider)] as const,
@@ -488,6 +503,7 @@ export function registerAuthRpc(
   speed: SpeedController,
   proxy: ProxyConfigController | undefined = undefined,
   modelDefaults: ModelDefaultsController | undefined = undefined,
+  providerSettings: ProviderSettingsController | undefined = undefined,
 ): void {
   // `connection` is not in this plugin's inject list (headless compositions
   // lack it), so its startup order is unconstrained: defer registration until
@@ -499,7 +515,7 @@ export function registerAuthRpc(
         SUBSCRIPTIONS_AUTH_CHANNEL,
         async (endpoint, payload, signal) => {
           try {
-            return await dispatch(controller, speed, proxy, modelDefaults, endpoint, payload, signal)
+            return await dispatch(controller, speed, proxy, modelDefaults, endpoint, payload, signal, providerSettings)
           } catch (error) {
             return failure(error)
           }

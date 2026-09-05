@@ -6,9 +6,17 @@ Use your **ChatGPT (Codex)**, **Claude**, **Grok (X Premium)**, and **GitHub Cop
 
 ## Demo
 
-Settings → **Subscriptions**: per-provider login/logout, no API keys. Claude imports credentials from Claude Code when available and otherwise uses OAuth, as Codex and Grok always do (account address masked in the screenshot):
+Settings → **Subscriptions**: per-provider login/logout, no API keys. Claude imports credentials from Claude Code when available and otherwise uses OAuth, as Codex and Grok always do (settings screenshots use demo accounts and catalog data):
 
 ![Subscriptions settings page](https://raw.githubusercontent.com/V1ki/dsh-plugin-subscriptions/main/docs/images/subscriptions.png)
+
+Configure visibility, default reasoning effort, and context together in **Edit model list**, with shared Save and Cancel actions:
+
+![Model settings](https://raw.githubusercontent.com/V1ki/dsh-plugin-subscriptions/main/docs/images/model-settings.png)
+
+Configure image generation, video generation, and X search per provider. Tool switches apply only to sessions created after saving:
+
+![Provider tools](https://raw.githubusercontent.com/V1ki/dsh-plugin-subscriptions/main/docs/images/provider-tools.png)
 
 Logged-in providers join the session model picker with their live model catalogs:
 
@@ -57,7 +65,7 @@ Also included, registered when the matching provider is enabled:
 
 ### Refreshing model lists
 
-In **Settings → Subscriptions → Default reasoning effort**, use **Refresh model lists (all subscriptions)** to bypass the five-minute catalog cache and refresh the conversation model picker too. This is separate from refreshing subscription usage. If `models.<provider>` is explicitly configured with a non-empty list, that list still overrides discovery.
+In **Settings → Subscriptions → provider → Edit model list**, use **Refresh** to bypass the five-minute catalog cache and refresh the conversation model picker too. This is separate from refreshing subscription usage. If `models.<provider>` is explicitly configured with a non-empty list, that list still overrides discovery.
 
 Codex catalog visibility depends on the `client_version` request parameter. By default the plugin reads the stable version from the official npm `@openai/codex` package's public metadata (no CLI installation or subscription credentials sent to npm). Successful lookups are cached in memory for six hours; failures retry after five minutes and retain the last successful version, or the verified `0.153.4` fallback on first use. The lookup has a 1.5-second deadline, shares in-flight work across accounts, and ignores prerelease or regressed versions. Manual model-list refresh also rechecks the version. An explicit plugin configuration field, `codexClientVersion: '0.153.4'`, takes precedence and disables automatic lookup; restart DSH after changing it. Model availability remains account-dependent; see [verification notes](docs/codex-catalog-refresh.md).
 
@@ -123,11 +131,21 @@ Not logged in? The provider stays out of the picker, and requests fail with `MIS
 
 Every provider accepts several accounts: once one is connected, the card grows an **Add account** button (Claude offers **Browser authorization** and **Import Claude Code** separately). Accounts are keyed by their identity (email / login) — re-logging the same account updates it in place, a different account appends. Browser authorization signs in whichever account the browser currently uses, so switch accounts there first (or use an incognito window with the manual code) to add a different one. The ★ default account serves the direct provider routes; pool routes use every account. A Claude account imported from Claude Code stays synced with the CLI's credential store; OAuth-added Claude accounts refresh standalone so several accounts never fight over the Keychain entry.
 
-### Default reasoning effort per model
+### Edit visible models, context windows, and tools
 
-Every logged-in provider card in Settings → Subscriptions carries a collapsible **Default reasoning effort** section. It starts collapsed — the header shows how many models advertise reasoning levels and how many you have overridden — and the model list (with its live catalog lookup) loads only once you expand it, so a provider with dozens of models does not stretch the page or make it pay for a lookup nobody asked for. Expanded, each model that advertises reasoning levels gets a row whose options are the levels that provider's live catalog advertises for that exact model; past 8 such models the section also offers a name filter, and models without reasoning levels collapse into a single count line instead of one dead row each. With several accounts connected, the model list is the union across that provider's accounts, so a model any account advertises gets a row; the levels offered for it come from the first account whose catalog lists it (the ★ default account first), matching what the session picker resolves.
+Open **Settings → Subscriptions → provider → Edit model list**, search and select models, then **Save changes**. All discovered models are shown automatically by default. Selecting individual models, selecting all, or clearing the selection saves an explicit list; newly discovered models then stay hidden until selected. Enable automatic display again to restore discovery-driven visibility. Hidden models remain usable by existing sessions, and the editor retains the full catalog so they can be restored. Refreshing discovery preserves preferences; Cancel discards unsaved edits.
 
-Pick a level to make the session model picker preselect it whenever you switch to the model — no more settling for the provider's own default (e.g. Claude shows `Default`, Codex models follow `default_reasoning_level`). Choose **Follow provider** to clear the override. The choice is stored in `~/.dsh/plugins/subscriptions/model-defaults.json` (mode 0600) and survives restarts.
+Codex models also accept a context budget in tokens; leave it blank to follow the provider. The plugin reads each account's `context_window` and `max_context_window`, caps the requested budget at that account's maximum, and uses the advertised default as the conservative ceiling when no maximum is provided. Account pools resolve each member separately and use the smallest window. This changes DSH's local history budget and compaction timing, without sending an API capacity override. Longer contexts can increase response latency.
+
+The same editor controls Codex image generation and Grok image generation, video generation, and X search. Changes apply only to sessions created after saving; existing sessions retain their creation-time policy, including after restart. Image generation is shared: it disappears only when neither configured provider enables it, and execution never falls back to a provider disabled for that session. Claude and Copilot currently have no standalone subscription tools to configure.
+
+Preferences and tool-policy history live in `~/.dsh/plugins/subscriptions/provider-settings.json` (mode 0600), independently of the five-minute discovery cache. Existing non-empty `models.<provider>` configuration still defines the base catalog; visibility selections filter that catalog.
+
+### Reasoning defaults in the model editor
+
+Default reasoning effort now lives in **Edit model list**, beside each model's visibility and context settings. Apply edits with **Save changes**, or discard unsaved edits with Cancel. Hidden models remain editable. Models without reasoning levels have no selector; **Follow provider** clears an override. Choices come from live capabilities, intersected across account-pool members. Custom pool aliases do not offer ineffective effort overrides.
+
+Existing defaults continue to load from and save to `~/.dsh/plugins/subscriptions/model-defaults.json` (mode 0600). If a save fails partway through, unfinished edits remain in the draft; the UI reports any defaults already saved and lets you retry.
 
 ## Config
 

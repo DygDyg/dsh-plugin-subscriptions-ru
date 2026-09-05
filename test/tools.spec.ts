@@ -6,7 +6,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LlmError } from '@deepseek-ai/dsh-llm'
@@ -316,6 +316,29 @@ test('parseImageGenerateResponse: b64 decode, revised prompt, empty data', () =>
   assert.equal(parsed[0].revisedPrompt, 'better prompt')
   assert.throws(() => parseImageGenerateResponse({ data: [] }), /no image data/)
   assert.throws(() => parseImageGenerateResponse({}), /no image data/)
+})
+
+test('image_generate excludes disabled providers from preferred and fallback routing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'image-policy-'))
+  const urls: string[] = []
+  const fetchFn = (async (url: string | URL | Request) => {
+    urls.push(String(url))
+    return new Response(JSON.stringify({ data: [{ b64_json: Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64') }] }))
+  }) as FetchFn
+  try {
+    const tool = createImageGenerateTool({
+      codexTokens: memoryTokens(codexSession), grokTokens: memoryTokens(grokSession),
+      providerEnabled: provider => provider === 'grok', fetchFn, imagesDir: dir,
+    })
+    await tool.execute({ prompt: 'cat', provider: 'gpt' }, fakeExec())
+    assert.equal(urls[0], 'https://api.x.ai/v1/images/generations')
+    const disabled = createImageGenerateTool({
+      codexTokens: memoryTokens(codexSession), grokTokens: memoryTokens(grokSession),
+      providerEnabled: () => false, fetchFn, imagesDir: dir,
+    })
+    await assert.rejects(disabled.execute({ prompt: 'cat' }, fakeExec()), /disabled/)
+    assert.equal(urls.length, 1)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
 test('image_generate execute: writes files, error status, and logged-out', async () => {

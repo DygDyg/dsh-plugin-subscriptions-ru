@@ -44,9 +44,10 @@ export interface AccountAwareAdapter extends LlmAdapter {
    * Capability resolution of the provider's OWN models, bypassing the pool
    * delegation. The pool resolves its members through this — an account pool
    * reuses the catalog wire id (e.g. `gpt-5.4`), so resolveModel would
-   * otherwise bounce straight back into the pool forever.
+   * otherwise bounce straight back into the pool forever. The optional account
+   * lets adapters with account-specific limits resolve that member conservatively.
    */
-  resolveOwnModel(provider: string, model: string): Promise<LlmResolvedModelInfo>
+  resolveOwnModel(provider: string, model: string, account?: string): Promise<LlmResolvedModelInfo>
   /** Drop cached catalogs: one account, or every account when omitted (login/logout). */
   clearAccountCatalog(account?: string): void
 }

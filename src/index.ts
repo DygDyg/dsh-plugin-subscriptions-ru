@@ -111,6 +111,7 @@ import { createXSearchTool } from './tools/x-search.js'
 import { createImageGenerateTool } from './tools/image-generate.js'
 import { createVideoGenerateTool, videosDirectory } from './tools/video-generate.js'
 import { proxiedFetch, proxyGetConfig, proxySetConfig, proxyTestConnection } from './http.js'
+import { ProviderSettingsStore, PROVIDER_TOOLS, validatePreferences } from './provider-settings.js'
 
 export type { ModelEntry, ProviderUsage, UsageWindow } from './providers/common.js'
 export type { RateLimitConfig, RateLimitWait } from './providers/rate-limit.js'
@@ -556,6 +557,7 @@ export class SubscriptionsAuthController implements AuthController {
 }
 
 export function apply(ctx: Context, config: Config): void {
+  const preferences = new ProviderSettingsStore()
   const codexVersion = new CodexClientVersionCache()
   const providers = [...new Set(config.providers ?? [...PROVIDER_IDS])]
   const streamIdleTimeoutMs = config.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
@@ -660,6 +662,7 @@ export function apply(ctx: Context, config: Config): void {
           // restarts, so a resumed session's selected effort keeps resolving.
           catalogStore: catalogStore('codex'),
           defaultEffortOf: (model: string) => defaultEffortOf('codex', model),
+          contextWindowOf: model => preferences.contextWindow(model),
           pool: () => poolAdapter,
           speedFor: (sessionId: string | undefined, model: string): boolean | Promise<boolean> =>
             sessionId !== undefined
@@ -856,6 +859,14 @@ export function apply(ctx: Context, config: Config): void {
     })
   }
 
+  // Keep the full catalog for the editor and routing; filter only picker enumeration.
+  const fullCatalogs = new Map<ProviderId, (provider: string) => Promise<readonly LlmModelInfo[]>>()
+  for (const [provider, adapter] of adapters) {
+    const list = adapter.listModels.bind(adapter)
+    fullCatalogs.set(provider, list)
+    adapter.listModels = async route => (await list(route)).filter(model => preferences.visible(provider, model.id))
+  }
+
   const speed: SpeedController = {
     async speed(sessionId) {
       return {
@@ -959,7 +970,60 @@ export function apply(ctx: Context, config: Config): void {
     get: () => proxyGetConfig(),
     set: input => proxySetConfig(input),
     test: payload => proxyTestConnection(payload.url, payload.proxy),
-  }, modelDefaults)
+  }, modelDefaults, {
+    async get(provider, force) {
+      await loadModelDefaults()
+      const adapter = adapters.get(provider)
+      if (!adapter) throw new BadRequest(`provider ${provider} is not configured`)
+      if (force) {
+        if (provider === 'codex') codexVersion.invalidate()
+        adapter.clearAccountCatalog()
+        poolAdapter?.invalidate()
+        handles.get(provider)?.replace([provider])
+      }
+      const models = await fullCatalogs.get(provider)!(provider)
+      // Enumerate each account once, with the same bounds used by pool discovery.
+      const accounts = provider === 'codex' ? await codexTokens!.list() : []
+      const accountCatalogs = await Promise.all(accounts.map(async account => ({
+        account: account.key,
+        models: await withTimeout(signal => adapter.listOwnModels(provider, account.key, signal), DISCOVERY_TIMEOUT_MS).catch(() => undefined),
+      })))
+      const tierIds = new Set((await poolAdapter?.modelsForProvider(provider).catch(() => []) ?? []).map(model => model.id))
+      const rows = await Promise.all(models.map(async model => {
+        const contexts: { default: number; max: number }[] = []
+        if (provider === 'codex' && codexAdapter) {
+          for (const account of accountCatalogs) {
+            if (account.models?.some(entry => entry.id === model.id)) {
+              const limits = await codexAdapter.contextLimits(model.id, account.account).catch(() => undefined)
+              if (limits) contexts.push(limits)
+            }
+          }
+        }
+        // A model with unavailable capabilities can still be hidden or restored.
+        const info = await withTimeout(() => adapter.resolveModel(provider, model.id), DISCOVERY_TIMEOUT_MS).catch(() => undefined)
+        return {
+          id: model.id, name: model.name,
+          contextWindow: info?.context?.contextWindow,
+          efforts: tierIds.has(model.id) ? [] : info?.reasoning?.efforts.map(({ id, name }) => ({ id, name })) ?? [],
+          configured: defaultEffortOf(provider, model.id),
+          ...(contexts.length ? {
+            defaultContextWindow: Math.min(...contexts.map(entry => entry.default)),
+            maxContextWindow: Math.min(...contexts.map(entry => entry.max)),
+          } : {}),
+        }
+      }))
+      return { provider, settings: preferences.get(provider), models: rows, tools: PROVIDER_TOOLS[provider] }
+    },
+    async set(provider, settings) {
+      if (!adapters.has(provider)) throw new BadRequest(`provider ${provider} is not configured`)
+      let validated
+      try { validated = validatePreferences(provider, settings) } catch (error) {
+        throw new BadRequest(error instanceof Error ? error.message : String(error))
+      }
+      await preferences.set(provider, validated)
+      handles.get(provider)?.replace([provider])
+    },
+  })
 
   // Proactively keep keychain-bound Claude accounts synced with Claude Code's
   // own store (Keychain/file) every 5 minutes, so a session left idle between
@@ -996,7 +1060,25 @@ export function apply(ctx: Context, config: Config): void {
         ...grokTokens === undefined ? {} : { grokTokens },
         resolveAttachments,
         resolveLlm: () => ctx.get('llm'),
+        providerEnabled: (provider, createdAt) => preferences.toolEnabled(provider, 'image_generate', createdAt),
       }))
     }
+    // Restrictions are scoped to each agent. Keep global definitions registered
+    // so already-open sessions retain both their schemas and execution path.
+    toolsCtx.on('agent/created', ({ agent }) => {
+      const at = agent.session.header.createdAt
+      const deny: string[] = []
+      if (grokTokens !== undefined) {
+        for (const tool of ['x_search', 'video_generate'] as const) {
+          if (!preferences.toolEnabled('grok', tool, at)) deny.push(tool)
+        }
+      }
+      if ((codexTokens !== undefined || grokTokens !== undefined)
+        && !(codexTokens !== undefined && preferences.toolEnabled('codex', 'image_generate', at))
+        && !(grokTokens !== undefined && preferences.toolEnabled('grok', 'image_generate', at))) {
+        deny.push('image_generate')
+      }
+      if (deny.length) agent.ctx.tools.restrict({ deny })
+    })
   })
 }

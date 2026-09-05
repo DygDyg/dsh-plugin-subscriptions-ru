@@ -38,6 +38,8 @@ export const GROK_IMAGE_GENERATE_MODEL = 'grok-imagine-image-2.0'
 
 /** Dependencies of the `image_generate` tool. */
 export interface ImageGenerateToolOptions {
+  /** Creation-time provider policy; existing sessions retain their original tools. */
+  providerEnabled?: (provider: 'codex' | 'grok', createdAt: number | undefined) => boolean
   /** Codex session source; the default preferred provider (`provider: 'gpt'`). */
   codexTokens?: AccountTokenManager<CodexSession>
   /** Grok session source; preferred when the call passes `provider: 'grok'`. */
@@ -335,8 +337,11 @@ export function createImageGenerateTool(options: ImageGenerateToolOptions): Tool
       // still resolves through `session()` below so the standard log-in hint
       // surfaces.
       const preferGrok = args.provider === 'grok'
-      const codexReady = options.codexTokens !== undefined && await options.codexTokens.hasSession()
-      const grokReady = options.grokTokens !== undefined && await options.grokTokens.hasSession()
+      const createdAt = exec.agent?.session.header?.createdAt
+      const codexEnabled = options.providerEnabled?.('codex', createdAt) !== false
+      const grokEnabled = options.providerEnabled?.('grok', createdAt) !== false
+      const codexReady = codexEnabled && options.codexTokens !== undefined && await options.codexTokens.hasSession()
+      const grokReady = grokEnabled && options.grokTokens !== undefined && await options.grokTokens.hasSession()
       const useGrok = preferGrok ? grokReady : grokReady && !codexReady
       const useCodex = !useGrok && codexReady
       let response: Response
@@ -367,9 +372,10 @@ export function createImageGenerateTool(options: ImageGenerateToolOptions): Tool
           signal: exec.signal,
         })
       } else {
-        const manager = preferGrok
-          ? options.grokTokens ?? options.codexTokens
-          : options.codexTokens ?? options.grokTokens
+        if (!codexEnabled && !grokEnabled) throw new Error('image_generate: disabled for this session')
+        const codex = codexEnabled ? options.codexTokens : undefined
+        const grok = grokEnabled ? options.grokTokens : undefined
+        const manager = preferGrok ? grok ?? codex : codex ?? grok
         if (manager === undefined) throw new Error('image_generate: no image provider is configured')
         await manager.session() // logged out: throws the provider's log-in hint
         throw new Error('image_generate: no image provider is logged in')

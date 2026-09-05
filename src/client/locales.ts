@@ -2,6 +2,25 @@
 
 /** English strings (the key-set source of truth for this pair). */
 export const en = {
+  modelsPartialSave: 'Some reasoning defaults were saved. Remaining changes are still in the draft; retry to finish.',
+  modelsEdit: "Edit model list",
+  modelsHint: "Configure model visibility, default reasoning effort, and context together, then save changes. Hidden models remain usable by existing sessions.",
+  modelsAutomatic: "Automatically show all models, including new models",
+  modelsSelectAll: "Select all",
+  modelsSelectNone: "Clear selection",
+  modelsContext: "Context (tokens)",
+  modelsContextBounds: "Default {default} · Maximum {max}",
+  modelsContextHint: "Leave blank to follow the provider. The requested window is capped by the account’s advertised maximum; account pools use the smallest member window. This controls local history and compaction, not the API’s capacity.",
+  modelsContextInvalid: "Enter a positive whole number of tokens for {model}.",
+  modelsTools: "Provider tools",
+  modelsToolsHint: "Changes apply only to sessions created after saving. Existing sessions keep their tools. Image generation remains available if either Codex or Grok is enabled.",
+  modelsImage: "Image generation",
+  modelsVideo: "Video generation",
+  modelsSearch: "X search",
+  modelsSave: "Save changes",
+  modelsSaved: "Saved. Tool changes apply to new sessions.",
+  modelsUnavailable: "Currently unavailable",
+
   nav: 'Subscriptions',
   intro: 'Log a subscription provider in or out. Login opens the provider’s authorization page in a new tab; headless setups can paste the callback URL or code instead.',
   unavailable: 'Connection unavailable; subscription status cannot be loaded.',
@@ -107,6 +126,25 @@ export const en = {
 
 /** zh strings, one per {@link en} key. */
 export const zh = {
+  modelsPartialSave: '部分推理档已保存，其余更改仍保留在草稿中，请重试完成保存。',
+  modelsEdit: "编辑模型列表",
+  modelsHint: "统一配置模型显示、默认推理档与上下文，点击保存更改后生效。隐藏模型不影响已有会话。",
+  modelsAutomatic: "自动显示全部模型（包含以后新增的模型）",
+  modelsSelectAll: "全选",
+  modelsSelectNone: "清空选择",
+  modelsContext: "上下文（token）",
+  modelsContextBounds: "默认 {default} · 最大 {max}",
+  modelsContextHint: "留空跟随服务商。配置值按账号返回的最大窗口限制；账号池取各成员的最小窗口。此设置控制本地历史保留和压缩时机，不会扩大 API 本身的容量。",
+  modelsContextInvalid: "请为 {model} 输入正整数 token 数。",
+  modelsTools: "Provider 工具",
+  modelsToolsHint: "仅对保存后新建的会话生效，已有会话保留原工具。Codex 或 Grok 任一方启用图片生成时，该工具仍会显示。",
+  modelsImage: "图片生成",
+  modelsVideo: "视频生成",
+  modelsSearch: "X 搜索",
+  modelsSave: "保存更改",
+  modelsSaved: "已保存。工具开关对新建会话生效。",
+  modelsUnavailable: "当前不可用",
+
   nav: '订阅',
   intro: '在此登录或退出订阅服务商。点击登录会在新标签页打开服务商的授权页面；无浏览器环境可改为粘贴回调 URL 或授权码。',
   unavailable: '连接不可用，无法加载订阅状态。',

@@ -410,6 +410,7 @@ interface CodexWireModel {
   display_name?: string
   description?: string | null
   context_window?: number | null
+  max_context_window?: number | null
   supported_reasoning_levels?: { effort?: string; description?: string }[]
   default_reasoning_level?: string | null
   service_tiers?: { id?: string; name?: string; description?: string }[]
@@ -486,6 +487,9 @@ export async function fetchCodexModels(
       ...typeof entry.context_window === 'number' && entry.context_window > 0
         ? { contextWindow: entry.context_window }
         : {},
+      ...Number.isSafeInteger(entry.max_context_window) && entry.max_context_window! > 0
+        ? { maxContextWindow: entry.max_context_window! }
+        : {},
       ...typeof entry.priority === 'number' ? { priority: entry.priority } : {},
       ...efforts.length > 0
         ? { reasoning: { efforts, ...defaultEffort === undefined ? {} : { defaultEffort } } }
@@ -535,6 +539,7 @@ export interface CodexAdapterOptions {
    * the provider's own default.
    */
   defaultEffortOf?: (model: string) => string | undefined
+  contextWindowOf?: (model: string) => number | undefined
   /**
    * Per-request speed lookup (the composer Speed toggle's host half). Returns
    * whether this session's current choice sends the model on the fast tier;
@@ -795,9 +800,11 @@ export class CodexAdapter extends LlmAdapter {
    * CODEX_EFFORTS list) selected by the user must not vanish — and fail the
    * call — just because the TTL lapsed mid-turn.
    */
-  private async discovered(model: string): Promise<DiscoveredModel | undefined> {
+  private async discovered(model: string, account?: string): Promise<DiscoveredModel | undefined> {
     if (!this.options.discovery) return undefined
-    const accounts = (await this.options.tokens.list()).map(entry => entry.key)
+    const accounts = account === undefined
+      ? (await this.options.tokens.list()).map(entry => entry.key)
+      : [account]
     return discoverAcrossAccounts(accounts, async account => {
       const catalog = await this.catalogFor(account)
       const models = await catalog.resolve(() => this.fetchCatalog(account))
@@ -845,11 +852,11 @@ export class CodexAdapter extends LlmAdapter {
   }
 
   /** Capability resolution of the provider's own models (the pool resolves members here). */
-  async resolveOwnModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+  async resolveOwnModel(provider: string, model: string, account?: string): Promise<LlmResolvedModelInfo> {
     // Discovered metadata (when discovery is on) wins over the static entry;
     // the static entry wins over the built-in defaults. A configured default
     // effort merges over both.
-    const discovered = await this.discovered(model)
+    const discovered = await this.discovered(model, account)
     const configured = this.options.models.find(entry => entry.id === model)
     // `extendable` only while falling back to the built-in list: that one is
     // known to trail the backend, so a configured level it omits still has to
@@ -866,10 +873,23 @@ export class CodexAdapter extends LlmAdapter {
       name: discovered?.name ?? configured?.name ?? model,
       ...discovered?.description === undefined ? {} : { description: discovered.description },
       inputModalities: configured?.inputModalities ?? CODEX_MODALITIES,
-      context: { contextWindow: discovered?.contextWindow ?? configured?.contextWindow ?? CODEX_CONTEXT_WINDOW },
+      context: { contextWindow: await this.contextWindowFor(model, account) },
       defaultMaxTokens: configured?.maxTokens ?? CODEX_DEFAULT_MAX_TOKENS,
       ...(reasoning === undefined ? {} : { reasoning }),
     }
+  }
+
+  /** Account-specific bounds; absent maximum conservatively keeps the advertised default. */
+  async contextLimits(model: string, account?: string): Promise<{ default: number; max: number }> {
+    const discovered = await this.discovered(model, account)
+    const configured = this.options.models.find(entry => entry.id === model)
+    const fallback = discovered?.contextWindow ?? configured?.contextWindow ?? CODEX_CONTEXT_WINDOW
+    return { default: fallback, max: discovered?.maxContextWindow ?? fallback }
+  }
+
+  private async contextWindowFor(model: string, account?: string): Promise<number> {
+    const limits = await this.contextLimits(model, account)
+    return Math.min(this.options.contextWindowOf?.(model) ?? limits.default, limits.max)
   }
 
   async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {

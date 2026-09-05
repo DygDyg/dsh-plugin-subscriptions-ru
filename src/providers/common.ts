@@ -451,6 +451,8 @@ export interface ProviderUsage {
 
 /** One model discovered from a provider's live model-list endpoint. */
 export interface DiscoveredModel {
+  /** Account-specific server-advertised ceiling for local context overrides. */
+  maxContextWindow?: number
   /** Wire model id. */
   id: string
   /** Human-readable display name. */
