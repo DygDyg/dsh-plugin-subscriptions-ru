@@ -182,6 +182,62 @@ test('listModels returns [] when logged out (codex, claude, grok)', async () => 
   assert.deepEqual(await grok.listModels('grok'), [])
 })
 
+test('codex catalog version gates GPT-6 and supports an explicit compatibility override', async () => {
+  const seen: string[] = []
+  const fetchFn: FetchFn = async (input) => {
+    const version = new URL(String(input)).searchParams.get('client_version') ?? ''
+    seen.push(version)
+    return new Response(JSON.stringify({ models: version === '0.147.0'
+      ? [{ slug: 'gpt-5.6-sol' }]
+      : [{ slug: 'gpt-6-astra', visibility: 'list', supported_reasoning_levels: [{ effort: 'max' }] }, { slug: 'hidden', visibility: 'hide' }],
+    }))
+  }
+  assert.deepEqual((await fetchCodexModels(codexSession, fetchFn)).map(model => model.id), ['gpt-6-astra'])
+  assert.deepEqual((await fetchCodexModels(codexSession, fetchFn, undefined, '0.147.0')).map(model => model.id), ['gpt-5.6-sol'])
+  assert.deepEqual(seen, ['0.153.4', '0.147.0'])
+  await assert.rejects(() => fetchCodexModels(codexSession, fetchFn, undefined, '0.153.4&bad=1'), /codexClientVersion/)
+  assert.equal(seen.length, 2, 'invalid versions must not reach the network')
+})
+
+test('codex catalog refresh invalidates all accounts and preserves configured version', async () => {
+  let fresh = false
+  const calls: string[] = []
+  const adapter = new CodexAdapter({
+    models: STATIC_CODEX, streamIdleTimeoutMs: 1000, discovery: true,
+    clientVersion: '0.154.0-alpha.3',
+    resolveClientVersion: async () => { throw new Error('explicit version must bypass lookup') },
+    tokens: memoryAccounts({ first: codexSession, second: { ...codexSession, accountId: 'second' } }),
+    fetchFn: async (input) => {
+      assert.equal(new URL(String(input)).searchParams.get('client_version'), '0.154.0-alpha.3')
+      calls.push(String(input))
+      return new Response(JSON.stringify({ models: [{ slug: fresh ? 'gpt-6-astra' : 'gpt-5.6-sol' }] }))
+    },
+  })
+  assert.deepEqual((await adapter.listModels('codex')).map(model => model.id), ['gpt-5.6-sol'])
+  fresh = true
+  assert.deepEqual((await adapter.listModels('codex')).map(model => model.id), ['gpt-5.6-sol'])
+  assert.equal(calls.length, 2)
+  adapter.clearAccountCatalog()
+  assert.deepEqual((await adapter.listModels('codex')).map(model => model.id), ['gpt-6-astra'])
+  assert.equal(calls.length, 4, 'both accounts are fetched again within the TTL')
+})
+
+test('codex adapter uses the automatic compatibility version for catalog requests', async () => {
+  let lookups = 0
+  const adapter = new CodexAdapter({
+    models: STATIC_CODEX, streamIdleTimeoutMs: 1000, discovery: true,
+    tokens: memoryTokens(codexSession),
+    resolveClientVersion: async () => { lookups++; return '0.155.0' },
+    fetchFn: async (input) => {
+      assert.equal(new URL(String(input)).searchParams.get('client_version'), '0.155.0')
+      return Response.json({ models: [{ slug: 'gpt-6-astra' }] })
+    },
+  })
+  assert.deepEqual((await adapter.listModels('codex')).map(model => model.id), ['gpt-6-astra'])
+  await adapter.listModels('codex')
+  assert.equal(lookups, 1, 'a cached model list needs no version lookup')
+})
+
 test('codex discovery maps, filters hidden entries, and sorts by priority', async () => {
   const { fetchFn, calls } = fakeFetch(CODEX_MODELS_PAYLOAD)
   const adapter = codexAdapter({ session: codexSession, fetchFn })

@@ -24,6 +24,7 @@ const { modelDefaultsFilePath, resetModelDefaultsForTests } = await import('../s
 interface FakeLlm {
   registered: string[]
   replaced: string[]
+  catalogClears: number
 }
 
 /**
@@ -41,7 +42,7 @@ async function mount(options: { tier?: string } = {}): Promise<{ handler: Connec
   await resetModelDefaultsForTests()
   rmSync(modelDefaultsFilePath(), { force: true })
   let handler: ConnectionRpcHandler | undefined
-  const fake: FakeLlm = { registered: [], replaced: [] }
+  const fake: FakeLlm = { registered: [], replaced: [], catalogClears: 0 }
   const ctx = new Context()
   const listed = [{ id: 'gpt-5.6-sol', name: 'GPT-5.6-Sol' }]
   // A configured tier appears in the picker catalog the same way the pool
@@ -62,7 +63,9 @@ async function mount(options: { tier?: string } = {}): Promise<{ handler: Connec
         defaultEffort: ReasoningEffortId('low'),
       },
     }),
-    registerAdapter: (providers: string[]) => {
+    registerAdapter: (providers: string[], adapter: { clearAccountCatalog(): void }) => {
+      const clear = adapter.clearAccountCatalog.bind(adapter)
+      adapter.clearAccountCatalog = () => { fake.catalogClears++; clear() }
       fake.registered.push(...providers)
       return Object.assign(() => {}, {
         replace: (next: string[]) => { fake.replaced.push(...next) },
@@ -110,6 +113,19 @@ test('modelDefaults serves the listed models with their advertised efforts', asy
     name: 'GPT-5.6-Sol',
     efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }],
   })
+})
+
+test('modelDefaults refresh validates force and re-announces the picker only on explicit refresh', async () => {
+  const { handler, fake } = await mount()
+  await call(handler, 'modelDefaults', {})
+  await call(handler, 'modelDefaults', { force: false })
+  assert.deepEqual(fake.replaced, [])
+  assert.equal(fake.catalogClears, 0)
+  assert.equal((await call(handler, 'modelDefaults', { force: 'true' })).ok, false)
+  assert.deepEqual(fake.replaced, [])
+  assert.equal((await call(handler, 'modelDefaults', { force: true })).ok, true)
+  assert.deepEqual(fake.replaced, ['codex'])
+  assert.equal(fake.catalogClears, 1)
 })
 
 test('setModelDefault persists and the next modelDefaults reports it', async () => {

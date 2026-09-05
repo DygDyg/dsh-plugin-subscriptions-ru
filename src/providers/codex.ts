@@ -390,11 +390,19 @@ export const CODEX_MODELS_URL = 'https://chatgpt.com/backend-api/codex/models'
 
 /**
  * Client version sent on the /models catalog request. The backend gates the
- * visible model list by client version: versions below ~0.101 get an empty
- * list, while current codex CLI releases get the full catalog — keep this in
- * the range of current codex CLI releases.
+ * visible model list by client version. Verified 2026-09-05: the same account
+ * omitted GPT-6 Astra at 0.147.0 and listed it at stable CLI 0.153.4. This is
+ * not an entitlement guarantee; the server remains authoritative.
  */
-export const CODEX_CLIENT_VERSION = '0.147.0'
+export const CODEX_CLIENT_VERSION = '0.153.4'
+
+/** Validate an explicit catalog compatibility version before using it on the wire. */
+export function codexClientVersion(value = CODEX_CLIENT_VERSION): string {
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/.test(value)) {
+    throw new Error('codexClientVersion must be a version such as 0.153.4')
+  }
+  return value
+}
 
 /** The codex `/models` entry shape this plugin reads (subset of codex-rs `ModelInfo`). */
 interface CodexWireModel {
@@ -425,14 +433,17 @@ function supportsFastTier(entry: CodexWireModel): boolean {
  * @param session - the stored session (used as-is; never refreshed here).
  * @param fetchFn - fetch implementation (injectable for tests).
  * @param signal - caller cancellation (pool-assembly timeout).
+ * @param clientVersion - catalog compatibility version, not the plugin version.
  * @returns discovered models: hidden entries dropped, sorted by priority.
  */
 export async function fetchCodexModels(
   session: CodexSession,
   fetchFn: FetchFn = proxiedFetch,
   signal?: AbortSignal,
+  clientVersion = CODEX_CLIENT_VERSION,
 ): Promise<DiscoveredModel[]> {
-  const url = `${CODEX_MODELS_URL}?client_version=${CODEX_CLIENT_VERSION}`
+  const version = codexClientVersion(clientVersion)
+  const url = `${CODEX_MODELS_URL}?client_version=${encodeURIComponent(version)}`
   const response = await fetchFn(url, {
     headers: {
       'authorization': `Bearer ${session.accessToken}`,
@@ -488,13 +499,17 @@ export async function fetchCodexModels(
   // client_version too old): surface it as a discovery failure so the adapter
   // falls back to the static catalog instead of vanishing from the picker.
   if (discovered.length === 0) {
-    throw new Error(`codex models endpoint returned an empty catalog (client_version ${CODEX_CLIENT_VERSION})`)
+    throw new Error(`codex models endpoint returned an empty catalog (client_version ${version})`)
   }
   return discovered
 }
 
 /** Constructor dependencies for {@link CodexAdapter}. */
 export interface CodexAdapterOptions {
+  /** Catalog compatibility version; defaults to the verified stable CLI version. */
+  clientVersion?: string
+  /** Automatic lookup used only when no explicit compatibility version is set. */
+  resolveClientVersion?: () => Promise<string>
   models: readonly ModelEntry[]
   streamIdleTimeoutMs: number
   tokens: AccountTokenManager<CodexSession>
@@ -655,12 +670,15 @@ export class CodexAdapter extends LlmAdapter {
 
   constructor(private readonly options: CodexAdapterOptions) {
     super()
+    codexClientVersion(options.clientVersion)
     this.catalog = new ModelCatalogCache(options.catalogStore)
   }
 
   /** Discovery fetcher: resolves the session through the refresh-aware path. */
   private async fetchCatalog(account?: string, signal?: AbortSignal): Promise<DiscoveredModel[]> {
-    return fetchCodexModels(await this.options.tokens.session(account), this.options.fetchFn, signal)
+    const version = this.options.clientVersion ?? await this.options.resolveClientVersion?.()
+    signal?.throwIfAborted()
+    return fetchCodexModels(await this.options.tokens.session(account), this.options.fetchFn, signal, version)
   }
 
   /** Drop cached catalogs after login/logout so the next list does not reuse a stale plan. */

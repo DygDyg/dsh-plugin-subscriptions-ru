@@ -55,6 +55,14 @@ Also included, registered when the matching provider is enabled:
 
 ## Install
 
+### Refreshing model lists
+
+In **Settings → Subscriptions → Default reasoning effort**, use **Refresh model lists (all subscriptions)** to bypass the five-minute catalog cache and refresh the conversation model picker too. This is separate from refreshing subscription usage. If `models.<provider>` is explicitly configured with a non-empty list, that list still overrides discovery.
+
+Codex catalog visibility depends on the `client_version` request parameter. By default the plugin reads the stable version from the official npm `@openai/codex` package's public metadata (no CLI installation or subscription credentials sent to npm). Successful lookups are cached in memory for six hours; failures retry after five minutes and retain the last successful version, or the verified `0.153.4` fallback on first use. The lookup has a 1.5-second deadline, shares in-flight work across accounts, and ignores prerelease or regressed versions. Manual model-list refresh also rechecks the version. An explicit plugin configuration field, `codexClientVersion: '0.153.4'`, takes precedence and disables automatic lookup; restart DSH after changing it. Model availability remains account-dependent; see [verification notes](docs/codex-catalog-refresh.md).
+
+### Installation commands
+
 With the `dsh` CLI available, install from npm (prebuilt artifacts, no build permission needed):
 
 ```sh

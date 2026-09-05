@@ -65,6 +65,7 @@ import type { AccountAwareAdapter } from './providers/accounts.js'
 import { DEFAULT_RATE_LIMIT_MAX_WAIT_MS, resolveRateLimitWait } from './providers/rate-limit.js'
 import type { RateLimitConfig } from './providers/rate-limit.js'
 import { catalogStore } from './providers/catalog-store.js'
+import { CodexClientVersionCache } from './providers/codex-client-version.js'
 import { PoolAdapter } from './providers/pool.js'
 import { buildAccountPools, poolKey } from './providers/pool-family.js'
 import type { PoolDefinition, PoolMemberRef } from './providers/pool-family.js'
@@ -128,6 +129,8 @@ export { withTimeout } from './providers/common.js'
 
 /** Plugin config, validated by the same-named schemastery schema. */
 export interface Config {
+  /** Codex /models client_version override; does not change account entitlements. */
+  codexClientVersion?: string
   /** Provider routes to register; defaults to all four. */
   providers?: ProviderId[]
   /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
@@ -178,6 +181,7 @@ const poolMemberSchema: z<PoolMemberRef> = z.object({
 
 export const Config: z<Config> = z.object({
   providers: z.array(providerIdSchema).default(['codex', 'claude', 'grok', 'copilot']),
+  codexClientVersion: z.string(),
   streamIdleTimeoutMs: z.number().min(1).default(DEFAULT_STREAM_IDLE_TIMEOUT_MS),
   rateLimit: z.object({
     wait: z.boolean().default(true),
@@ -552,6 +556,7 @@ export class SubscriptionsAuthController implements AuthController {
 }
 
 export function apply(ctx: Context, config: Config): void {
+  const codexVersion = new CodexClientVersionCache()
   const providers = [...new Set(config.providers ?? [...PROVIDER_IDS])]
   const streamIdleTimeoutMs = config.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
   if (!Number.isFinite(streamIdleTimeoutMs) || streamIdleTimeoutMs <= 0) {
@@ -642,6 +647,8 @@ export function apply(ctx: Context, config: Config): void {
           fetchCodexUsage(await tokens.session(account), proxiedFetch, signal)
         let adapter!: CodexAdapter
         adapter = new CodexAdapter({
+          ...config.codexClientVersion === undefined ? {} : { clientVersion: config.codexClientVersion },
+          resolveClientVersion: () => codexVersion.resolve(),
           models: catalog.codex,
           streamIdleTimeoutMs,
           rateLimit,
@@ -866,7 +873,15 @@ export function apply(ctx: Context, config: Config): void {
   // session model picker, so the offered effort levels match the picker
   // exactly, and the configured default merges in through the adapters.
   const modelDefaults: ModelDefaultsController = {
-    async catalog(): Promise<ModelDefaultsCatalog[]> {
+    async catalog(force = false): Promise<ModelDefaultsCatalog[]> {
+      if (force) {
+        codexVersion.invalidate()
+        // This is not an auth transition: retain health, usage and Copilot
+        // reasoning replay, but bypass every account's discovery cache.
+        for (const adapter of adapters.values()) adapter.clearAccountCatalog()
+        poolAdapter?.invalidate()
+        for (const [route, handle] of handles) handle.replace([route])
+      }
       const visible = new Set((await ctx.llm.listProviders()).map(provider => provider.id))
       const catalog: ModelDefaultsCatalog[] = []
       for (const provider of PROVIDER_IDS) {

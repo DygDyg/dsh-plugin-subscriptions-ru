@@ -114,7 +114,7 @@ export interface ModelDefaultsCatalog {
 /** Default-effort picker operations behind the `modelDefaults/setModelDefault` endpoints. */
 export interface ModelDefaultsController {
   /** Per-provider picker state for the Settings page. */
-  catalog(): Promise<ModelDefaultsCatalog[]>
+  catalog(force?: boolean): Promise<ModelDefaultsCatalog[]>
   /** Set one model's configured default effort; undefined clears the override. */
   set(provider: ProviderId, model: string, effort: string | undefined): Promise<void>
 }
@@ -305,7 +305,7 @@ function readVideoName(payload: unknown): string {
   return name
 }
 
-/** Validate the `usage` endpoint's optional force flag. */
+/** Validate the usage/model catalog endpoints' optional force flag. */
 function readForce(payload: unknown): boolean {
   if (typeof payload !== 'object' || payload === null) return false
   const force = (payload as Record<string, unknown>).force
@@ -458,9 +458,10 @@ async function dispatch(
     case 'proxyTest':
       if (proxy === undefined) throw new BadRequest('proxy configuration is unavailable')
       return ok(await proxy.test(readProxyTestPayload(payload)))
-    case 'modelDefaults':
+    case 'modelDefaults': {
       if (modelDefaults === undefined) throw new BadRequest('model defaults are unavailable')
-      return ok(await modelDefaults.catalog())
+      return ok(await modelDefaults.catalog(readForce(payload)))
+    }
     case 'setModelDefault':
       if (modelDefaults === undefined) throw new BadRequest('model defaults are unavailable')
       {

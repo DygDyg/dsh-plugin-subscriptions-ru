@@ -674,12 +674,12 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
     setUsageErrors(prev => dropStale(prev, live))
   }, [statuses, usages, usageErrors, loadUsage])
 
-  const loadModelDefaultsData = useCallback(async (signature: string): Promise<void> => {
+  const loadModelDefaultsData = useCallback(async (signature: string, force = false): Promise<void> => {
     if (rpc === undefined || modelDefaultsInflightRef.current) return
     modelDefaultsInflightRef.current = true
     setModelDefaultsLoading(true)
     try {
-      const catalog = await callSubscriptionsAuth<ModelDefaultsCatalog[]>(rpc, 'modelDefaults', {})
+      const catalog = await callSubscriptionsAuth<ModelDefaultsCatalog[]>(rpc, 'modelDefaults', { force })
       if (!mountedRef.current) return
       const next: Partial<Record<SubscriptionProvider, ModelDefaultsCatalog>> = {}
       for (const entry of catalog) next[entry.provider] = entry
@@ -1190,6 +1190,16 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
                   {open && (
                     <>
                       <p style={styles.statusLine}>{t('modelDefaultsHint')}</p>
+                      <div style={styles.actions}>
+                        <button
+                          type="button"
+                          style={styles.button}
+                          disabled={modelDefaultsLoading || rpc === undefined}
+                          onClick={() => { void loadModelDefaultsData(modelDefaultsSignature(statuses), true) }}
+                        >
+                          {modelDefaultsLoading ? t('modelDefaultsLoading') : t('modelDefaultsRefresh')}
+                        </button>
+                      </div>
                       {modelDefaultsLoadError !== undefined && (
                         <>
                           <p style={styles.errorLine}>{t('modelDefaultsLoadFailed', { message: modelDefaultsLoadError })}</p>
