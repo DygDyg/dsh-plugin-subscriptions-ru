@@ -36,7 +36,7 @@ export interface ProxyConfig {
   username?: string
   /** Optional proxy password for basic auth; never sent back to the client. */
   password?: string
-  /** Hostnames (exact, suffix, or `*.example.com`) that stay direct. */
+  /** Hostnames (exact, suffix, or `*.example.com`) that use host routing instead. */
   bypass: string[]
 }
 
@@ -66,7 +66,7 @@ export interface ProxyInput {
 export interface ProxyTestResult {
   /** Whether the destination answered with an HTTP status. */
   ok: boolean
-  /** Whether the request actually went through the proxy (bypass/direct otherwise). */
+  /** Whether the plugin proxy was used; false means host routing, not necessarily direct. */
   viaProxy: boolean
   /** Status of the answered request, when one was received. */
   status?: number
@@ -223,7 +223,7 @@ function buildAgent(cfg: ProxyConfig): ProxyAgent | undefined {
   return new ProxyAgent(url.toString())
 }
 
-/** Swap in a config and its agent; a failed agent keeps the requests direct. */
+/** Swap in a config and its agent; a failed agent falls back to host routing. */
 async function applyConfig(cfg: ProxyConfig | undefined): Promise<void> {
   let next: ProxyAgent | undefined
   if (cfg !== undefined) {
@@ -361,7 +361,8 @@ export async function proxySetConfig(input: ProxyInput): Promise<ProxyConfigView
 
 /**
  * The fetch caller all subscription code uses: routes through the configured
- * proxy unless the host bypasses it. Identity-passthrough otherwise.
+ * proxy unless the host bypasses it. Identity-passthrough otherwise: the host
+ * may itself route global fetch through an environment-configured proxy.
  *
  * Proxied requests run on undici's own fetch (not the global one) so the
  * ProxyAgent dispatcher always comes from the same undici build the request

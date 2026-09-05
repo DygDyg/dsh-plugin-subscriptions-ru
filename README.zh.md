@@ -207,7 +207,9 @@ tools+effort 的自动改道。
 
 ## 代理
 
-所有订阅相关请求 —— token 交换、模型 API 流式调用、用量查询、模型目录发现,以及 `x_search` / `image_generate` / `video_generate` 工具 —— 都可以通过 HTTP(S) 代理发出。在 **设置 → 订阅 → 代理 → 配置…** 中设置:勾选启用,填写代理地址(`http://127.0.0.1:7890`)、可选用户名/密码,以及可选的逗号分隔绕过列表(保持直连的主机名,如 `127.0.0.1`、`localhost`、`*.example.com`)。密码保存在 `~/.dsh/plugins/subscriptions/proxy.json`(权限 0600),不会回传给浏览器;「测试」按钮会用当前配置探测一次端点,显示 HTTP 状态码与耗时。
+DSH `v0.1.3-alpha.1` 新增宿主统一代理支持。建议在启动环境或 `$DSH_HOME/.env` 中配置 `HTTP_PROXY` / `HTTPS_PROXY`(或 `ALL_PROXY`)以及 `NO_PROXY`,重启 DSH,然后**关闭插件代理**。参见 [DSH 网络代理指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.3-alpha.1/docs/user/guide/network-proxy.zh.md)。环境变量中的代理凭据会被子命令继承,与插件私有配置文件的凭据边界不同;不会自动删除或迁移已有设置。
+
+插件代理作为可选覆盖设置保留,用于仍受支持的旧版 DSH 以及仅订阅请求使用独立代理的场景。所有订阅相关请求 —— token 交换、模型 API 流式调用、用量查询、模型目录发现,以及 `x_search` / `image_generate` / `video_generate` 工具 —— 都可以使用。在 **设置 → 订阅 → 代理 → 配置…** 中设置:勾选启用,填写代理地址(`http://127.0.0.1:7890`)、可选用户名/密码,以及可选的逗号分隔绕过列表(如 `127.0.0.1`、`localhost`、`*.example.com`)。关闭或绕过插件代理后使用 DSH 的全局 fetch 路由,**不一定直连**;要求直连时还应配置宿主的 `NO_PROXY`。密码保存在 `~/.dsh/plugins/subscriptions/proxy.json`(权限 0600),不会回传给浏览器;「测试」按钮会用当前配置探测一次端点,显示 HTTP 状态码与耗时。
 
 保存后立即对后续请求生效,无需重启。OAuth 授权页在浏览器中打开,走浏览器/系统自身的代理设置,不受此配置影响;不支持 socks 代理。
 
