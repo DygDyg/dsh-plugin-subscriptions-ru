@@ -164,22 +164,24 @@ export function toResponsesInput(
 /**
  * Map harness tool schemas to Responses function tools.
  *
- * `strict` is sent as `false` explicitly: the Responses API defaults function
- * tools to strict mode, which demands every property be emitted on every call.
- * Harness schemas mark optional fields by omitting them from `required` (and
- * never as nullable), so under strict mode the model fills them all — e.g. a
- * bash call carrying `sandbox_permissions` with no denial to justify it, which
- * the harness rejects before anything runs.
+ * OpenAI Responses may normalize schemas into strict mode when `strict` is
+ * omitted. Codex and Copilot opt out to preserve harness optional parameters;
+ * this does not prevent a model from voluntarily supplying optional fields.
+ * Other providers keep their existing defaults unless explicitly opted out.
  * @param tools - tool schemas from the request.
+ * @param options - provider-specific opt-out from strict schema normalization.
  * @returns Responses `tools` array entries.
  */
-export function toResponsesTools(tools: readonly ToolSchema[]): Record<string, unknown>[] {
+export function toResponsesTools(
+  tools: readonly ToolSchema[],
+  options: { strict?: false } = {},
+): Record<string, unknown>[] {
   return tools.map(tool => ({
     type: 'function',
     name: tool.name,
     description: tool.description,
     parameters: tool.parameters,
-    strict: false,
+    ...options.strict === undefined ? {} : { strict: options.strict },
   }))
 }
 
