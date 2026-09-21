@@ -38,7 +38,7 @@ export interface AntigravityPart {
   thoughtSignature?: string
   inlineData?: { mimeType: string; data: string }
   functionCall?: { id?: string; name?: string; args?: unknown }
-  functionResponse?: { id: string; name: string; response: unknown }
+  functionResponse?: { id: string; name: string; response: Record<string, unknown> }
 }
 
 /** Full Antigravity request envelope. */
@@ -67,7 +67,7 @@ export interface AntigravityRequest {
  * wrapped in the same "output" envelope the non-JSON path already uses --
  * the shape other Cloud Code Assist clients send for every tool result.
  */
-function toolResultValue(block: ResolvedToolResultBlock): unknown {
+function toolResultValue(block: ResolvedToolResultBlock): Record<string, unknown> {
   const text = block.content.map(part => part.type === 'text' ? part.text : '').join('')
   let parsed: unknown
   try {
@@ -75,7 +75,7 @@ function toolResultValue(block: ResolvedToolResultBlock): unknown {
   } catch {
     return { output: text, ...block.isError === true ? { isError: true } : {} }
   }
-  if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+  if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>
   return { output: parsed }
 }
 
@@ -110,6 +110,13 @@ export function toAntigravityTools(tools: readonly ToolSchema[], model = 'gemini
   }]
 }
 
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = 'skip_thought_signature_validator'
+
+/** Gemini 3 validates the first function call in every model tool-call step. */
+function requiresThoughtSignatures(model?: string): boolean {
+  return model !== undefined && /^gemini-3(?:[.-]|$)/i.test(model)
+}
+
 /**
  * Convert resolved harness messages into Gemini contents. Function response
  * names are recovered from prior tool calls because DSH correlates results by
@@ -126,6 +133,7 @@ export function toAntigravityContents(messages: readonly TranslatableMessage[], 
     const role = message.role === 'assistant' ? 'model' as const : 'user' as const
     const metadata = replayBlocks(message, model)
     const parts: AntigravityPart[] = []
+    let sawFunctionCall = false
     for (let index = 0; index < message.content.length; index++) {
       const block = message.content[index]
       switch (block.type) {
@@ -154,12 +162,15 @@ export function toAntigravityContents(messages: readonly TranslatableMessage[], 
           } catch {
             args = {}
           }
+          const replaySignature = metadata[index]?.thoughtSignature
+          const thoughtSignature = replaySignature ?? (!sawFunctionCall && requiresThoughtSignatures(model)
+            ? SKIP_THOUGHT_SIGNATURE_VALIDATOR
+            : undefined)
           parts.push({
             functionCall: { id: String(block.id), name: block.name, args },
-            ...metadata[index]?.thoughtSignature === undefined
-              ? {}
-              : { thoughtSignature: metadata[index].thoughtSignature },
+            ...thoughtSignature === undefined ? {} : { thoughtSignature },
           })
+          sawFunctionCall = true
           break
         }
         case 'tool-result': {
