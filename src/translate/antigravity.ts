@@ -58,14 +58,25 @@ export interface AntigravityRequest {
   }
 }
 
-/** Flatten a harness tool result to the JSON value Antigravity receives. */
+/**
+ * Normalize a harness tool result to the JSON object Antigravity's
+ * `FunctionResponse.response` field requires. That field maps to a singular
+ * protobuf `Struct`, so a bare array, string, number or boolean is rejected
+ * by the endpoint with "Proto field is not repeating, cannot start list".
+ * Only a non-array JSON object survives verbatim; every other JSON value is
+ * wrapped in the same "output" envelope the non-JSON path already uses --
+ * the shape other Cloud Code Assist clients send for every tool result.
+ */
 function toolResultValue(block: ResolvedToolResultBlock): unknown {
   const text = block.content.map(part => part.type === 'text' ? part.text : '').join('')
+  let parsed: unknown
   try {
-    return JSON.parse(text) as unknown
+    parsed = JSON.parse(text) as unknown
   } catch {
     return { output: text, ...block.isError === true ? { isError: true } : {} }
   }
+  if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+  return { output: parsed }
 }
 
 /** Safely read per-block replay metadata emitted by this adapter. */
