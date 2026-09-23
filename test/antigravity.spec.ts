@@ -203,6 +203,19 @@ test('request conversion carries system, images, tools, tool results, and signed
   assert.equal(modelParts[1].thoughtSignature, 'signed-thought')
   const result = payload.request.contents.flatMap(content => content.parts).find(part => part.functionResponse)
   assert.deepEqual(result?.functionResponse?.response, { ok: true })
+
+  for (const [content, expected] of [
+    ['["one","two"]', { output: ['one', 'two'] }],
+    ['null', { output: null }],
+    ['42', { output: 42 }],
+  ] as const) {
+    const resultPayload = toAntigravityRequest(options([]), [
+      message('assistant', [{ type: 'tool-call', id: ToolCallId('array-call'), name: 'bash', arguments: '{}' }]),
+      message('user', [{ type: 'tool-result', toolCallId: ToolCallId('array-call'), content: [{ type: 'text', text: content }] }]),
+    ], 'project-123')
+    const resultPart = resultPayload.request.contents.flatMap(entry => entry.parts).find(part => part.functionResponse)
+    assert.deepEqual(resultPart?.functionResponse?.response, expected)
+  }
   const image = payload.request.contents.flatMap(content => content.parts).find(part => part.inlineData)
   assert.equal(image?.inlineData?.data, 'aGVsbG8=')
 })
@@ -562,6 +575,30 @@ test('Claude streaming caps maxOutputTokens at 64000 to avoid INVALID_ARGUMENT o
   assert.equal(geminiStream.request.generationConfig?.maxOutputTokens, 65536)
   const claudeStreamLow = toAntigravityRequest({ ...options([]), model: 'claude-sonnet-4-6', maxTokens: 2048 }, [], session.projectId, true)
   assert.equal(claudeStreamLow.request.generationConfig?.maxOutputTokens, 2048)
+})
+
+test('Gemini 3 marks unsigned foreign tool-call steps during a model switch', () => {
+  const foreignSource = { kind: 'model' as const, provider: 'codex', model: 'gpt-5.6' }
+  const first = ToolCallId('foreign-1')
+  const second = ToolCallId('foreign-2')
+  const messages: TranslatableMessage[] = [
+    message('assistant', [
+      { type: 'tool-call', id: first, name: 'run_code', arguments: '{}' },
+      { type: 'tool-call', id: second, name: 'read', arguments: '{}' },
+    ], foreignSource),
+    message('user', [
+      { type: 'tool-result', toolCallId: first, content: [{ type: 'text', text: '{"ok":true}' }] },
+      { type: 'tool-result', toolCallId: second, content: [{ type: 'text', text: '{"ok":true}' }] },
+    ]),
+    message('assistant', [{ type: 'tool-call', id: ToolCallId('foreign-3'), name: 'run_code', arguments: '{}' }], foreignSource),
+  ]
+  const calls = toAntigravityRequest(options([]), messages, session.projectId).request.contents
+    .flatMap(content => content.parts).filter(part => part.functionCall)
+  assert.equal(calls[0].thoughtSignature, 'skip_thought_signature_validator')
+  assert.equal(calls[1].thoughtSignature, undefined)
+  assert.equal(calls[2].thoughtSignature, 'skip_thought_signature_validator')
+  const gemini2 = toAntigravityRequest({ ...options([]), model: 'gemini-2.5-pro' }, messages, session.projectId)
+  assert.equal(gemini2.request.contents.flatMap(content => content.parts).find(part => part.functionCall)?.thoughtSignature, undefined)
 })
 
 test('Antigravity replays signed text and reasoning only for the same provider and model', () => {
