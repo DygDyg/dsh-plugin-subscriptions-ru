@@ -76,6 +76,10 @@ Image generation and editing share same-provider account scheduling: try the def
 
 ## Install
 
+### DSH compatibility
+
+The current release supports the published DSH `0.1.1-rc.2`, `0.1.2-alpha`/`rc`, `0.1.3-alpha`, and `0.1.5-alpha`/`rc` lines, including `0.1.5-rc.2`. The `0.1.5-alpha.1` peer-range anchor intentionally covers the later `0.1.5-alpha`, `0.1.5-rc`, and stable `0.1.5` builds under npm semver rules. DSH `0.1.6-alpha` is not included until it has been separately verified.
+
 ### Managing accounts and pool models
 
 Open **Settings → Subscriptions → provider → Manage** to edit account aliases, automatic-pool participation and model allowlists, and independent account model entries. Existing accounts continue using automatic pooling by default. Independent entries stay bound to one account and never fall back to another account when unavailable. These settings govern LLM routing, not image/video/search tool account policies. See [Account and model management](docs/account-management.md).
