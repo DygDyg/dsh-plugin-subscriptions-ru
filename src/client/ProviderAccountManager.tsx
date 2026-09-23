@@ -5,9 +5,10 @@ import type { AccountPreferences, ProviderPreferences } from '../provider-settin
 import type { SubscriptionProvider } from './SubscriptionsSection.js'
 import type { SubscriptionsKey } from './locales.js'
 import { callSubscriptionsAuth } from './subscriptions-rpc.js'
-import { accountModelRows, accountPoolSelection, mergeAccountChanges } from './account-preferences.js'
+import { accountModelRows, accountPoolSelection, mergeAccountChanges, mergeLatestAccounts } from './account-preferences.js'
 import type { AccountCatalogRow } from './account-preferences.js'
 import { ProviderModelEditor } from './ProviderModelEditor.js'
+import type { ProviderModelEditorHandle } from './ProviderModelEditor.js'
 
 interface Catalog { settings: ProviderPreferences; accounts: AccountCatalogRow[] }
 interface Props {
@@ -37,9 +38,12 @@ export function ProviderAccountManager({ provider, name, rpc, t, onClose }: Prop
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [saveError, setSaveError] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const [modelsDirty, setModelsDirty] = useState(false)
   const alive = useRef(true)
   const saveLock = useRef(false)
+  const editor = useRef<ProviderModelEditorHandle>(null)
   useEffect(() => {
     alive.current = true
     const element = dialog.current!
@@ -66,22 +70,39 @@ export function ProviderAccountManager({ provider, name, rpc, t, onClose }: Prop
   function edit(key: string, next: AccountPreferences) {
     setChanges(current => ({ ...current, [key]: next }))
   }
+  /**
+   * One submit for both drafts: the model editor's (visibility, effort,
+   * context, tools) and this dialog's account edits. A failure keeps the
+   * dialog open with every edit intact.
+   */
   async function save() {
     if (saveLock.current) return
+    // An invalid model draft (e.g. a malformed context window) blocks the
+    // whole submit; the editor shows the reason next to the field.
+    const models = editor.current === null ? { efforts: [] } : editor.current.collect()
+    if (models === undefined) return
     saveLock.current = true
     setSaving(true)
-    setError('')
+    setSaveError('')
+    let savedEfforts = 0
     try {
-      // The model editor may have saved after this dialog loaded. Never write
-      // its stale visibility/context/tool fields back with our account edits.
+      for (const { model, effort } of models.efforts) {
+        await callSubscriptionsAuth(rpc, 'setModelDefault', { provider, model, ...(effort ? { effort } : {}) })
+        savedEfforts++
+        if (!alive.current) return
+      }
+      // Re-read before writing: another client may have saved since this
+      // dialog loaded, and a stale snapshot must never be written back.
       const latest = await callSubscriptionsAuth<Catalog>(rpc, 'providerSettings', { provider })
       if (!alive.current) return
-      await callSubscriptionsAuth(rpc, 'setProviderSettings', {
-        provider, settings: mergeAccountChanges(latest.settings, changes),
-      })
+      const base = models.settings === undefined ? latest.settings : mergeLatestAccounts(models.settings, latest.settings)
+      await callSubscriptionsAuth(rpc, 'setProviderSettings', { provider, settings: mergeAccountChanges(base, changes) })
       if (alive.current) onClose()
     } catch (error) {
-      if (alive.current) setError(t('accountsSaveFailed', { message: error instanceof Error ? error.message : String(error) }))
+      if (alive.current) {
+        const message = error instanceof Error ? error.message : String(error)
+        setSaveError((savedEfforts ? t('modelsPartialSave') + ' ' : '') + t('accountsSaveFailed', { message }))
+      }
     } finally {
       saveLock.current = false
       if (alive.current) setSaving(false)
@@ -155,12 +176,15 @@ export function ProviderAccountManager({ provider, name, rpc, t, onClose }: Prop
           </fieldset>
         })}
       </fieldset>}
-      <ProviderModelEditor provider={provider} rpc={rpc} t={t} embedded />
-      <footer style={{ ...actions, justifyContent: 'flex-end', borderTop: border, padding: '14px 0 0',
+      <ProviderModelEditor ref={editor} provider={provider} rpc={rpc} t={t} disabled={saving} onDirtyChange={setModelsDirty} />
+      <footer style={{ ...stack, gap: 8, borderTop: border, padding: '14px 0 0',
         position: 'sticky', bottom: 0, background: 'var(--dsw-alias-bg-layer-1)' }}>
-        <button type="button" style={button} disabled={saving} onClick={onClose}>{t('cancel')}</button>
-        <button type="button" style={{ ...button, fontWeight: 600 }} disabled={loading || saving || !Object.keys(changes).length}
-          onClick={() => { void save() }}>{saving ? t('modelDefaultsSaving') : t('modelsSave')}</button>
+        {saveError && <p role="alert" style={{ ...hint, color: 'var(--dsw-alias-state-error-primary)' }}>{saveError}</p>}
+        <div style={{ ...actions, justifyContent: 'flex-end' }}>
+          <button type="button" style={button} disabled={saving} onClick={onClose}>{t('cancel')}</button>
+          <button type="button" style={{ ...button, fontWeight: 600 }} disabled={loading || saving || (!Object.keys(changes).length && !modelsDirty)}
+            onClick={() => { void save() }}>{saving ? t('modelDefaultsSaving') : t('modelsSave')}</button>
+        </div>
       </footer>
     </div>
   </dialog>
