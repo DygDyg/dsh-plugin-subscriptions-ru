@@ -248,6 +248,7 @@ const DEFAULT_MODELS: Record<ProviderId, ModelEntry[]> = {
     { id: 'gpt-5.1', name: 'GPT-5.1' },
   ],
   claude: [
+    { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', maxTokens: 128_000, contextWindow: 1_000_000 },
     { id: 'claude-opus-5', name: 'Claude Opus 5', maxTokens: 128_000, contextWindow: 1_000_000 },
     { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', maxTokens: 128_000, contextWindow: 1_000_000 },
     { id: 'claude-fable-5', name: 'Claude Fable 5', maxTokens: 128_000, contextWindow: 1_000_000 },
