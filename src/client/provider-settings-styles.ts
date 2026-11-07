@@ -150,6 +150,15 @@ ${formScope} button:disabled {
   opacity: 0.4;
   cursor: default;
 }
+${formScope} button.dsh-subscription-icon-button {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+}
 ${formScope} button.dsh-subscription-quiet {
   border-color: transparent;
   color: var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
@@ -189,7 +198,11 @@ export const subscriptionChromeCss = `
 .dsh-subscription-usage-pill { corner-shape: round; }
 .dsh-subscription-usage-panel {
   --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
-  backdrop-filter: var(--dsw-menu-backdrop-filter, none);
+  /* Opaque on purpose: the host menu token and its backdrop blur let the
+     conversation show through the quota dialog. */
+  background: var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base)) !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .dsh-subscription-speed button:hover:not(:disabled) {
   --dsh-subscription-speed-hover: var(--dsw-alias-interactive-bg-hover);

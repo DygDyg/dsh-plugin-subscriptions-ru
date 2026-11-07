@@ -1,6 +1,8 @@
-# dsh-plugin-subscriptions [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+# Grok Codex Claude [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 English | [中文](README.zh.md)
+
+Русская сборка [dsh-plugin-subscriptions](https://github.com/V1ki/dsh-plugin-subscriptions): встроенный выбор модели, уровень рассуждений и оставшиеся квоты. Пакет публикуется как `dsh-plugin-subscriptions-ru`.
 
 Use your **ChatGPT (Codex)**, **Claude**, **Grok (X Premium)**, **GitHub Copilot**, and **Google Antigravity** subscriptions as LLM providers in [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — no API keys. Codex, Grok, and Antigravity log in via OAuth in the dsh web UI (Settings → Subscriptions), while Copilot uses the GitHub OAuth device flow; Claude imports credentials from an existing Claude Code session when there is one (macOS Keychain or `~/.claude/.credentials.json`) and otherwise falls back to the same browser OAuth flow, so the Claude Code CLI is not required. Tokens live at `~/.dsh/plugins/subscriptions/auth.json` (mode 0600) and refresh automatically.
 
@@ -9,6 +11,8 @@ Use your **ChatGPT (Codex)**, **Claude**, **Grok (X Premium)**, **GitHub Copilot
 Open **Settings → Subscriptions → Manage** to set a subscription display name, or edit a model's display name under **Edit model list**. Both share the existing Save/Cancel actions; clearing a name or choosing Reset to default and saving restores the original name. Names are single-line text of up to 80 characters, stored per provider and model ID in `provider-settings.json`, and survive restarts and catalog refreshes. They only change presentation: provider IDs, model IDs, reasoning settings, and account routing remain unchanged. Existing account aliases continue to work independently.
 
 Subscription display names also label provider groups in the native model picker. Saving a cleared name restores the provider's default group title.
+
+A separate quota icon above the sidebar profile button opens a popup for connected subscription accounts that report usage. The original profile/settings launcher is left intact. Use **Refresh** to request a fresh snapshot; press Escape or click outside to dismiss. Providers without a usage endpoint are omitted. The current shell has no additive footer slot, so the overlay contribution portals its own row beside the footer launcher and removes it on disposal.
 
 ## Demo
 

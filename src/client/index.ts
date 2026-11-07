@@ -31,8 +31,14 @@ import type { VideoGenerateToolviewInjected } from './VideoGenerateToolview.js'
 import { SpeedSelect, createSpeedLoader, createSpeedSetter } from './SpeedSelect.js'
 import type { ModelDirectoriesLike, SpeedSelectInjected } from './SpeedSelect.js'
 import { SubscriptionUsageBadge, createCurrentModelReader } from './SubscriptionUsageBadge.js'
+import { ModelPicker } from './ModelPicker.js'
+import type { ModelPickerInjected, PickerDirectory, PickerQuota, PickerQuotaWindow } from './ModelPicker.js'
+import { callSubscriptionsAuth } from './subscriptions-rpc.js'
+import type { ProviderStatus, ProviderUsage, SubscriptionProvider, UsageWindow } from './SubscriptionsSection.js'
+import { visibleUsageWindows } from './usage-window-filter.js'
+import { SidebarUsageLauncher } from './SidebarUsageLauncher.js'
 import type { SubscriptionUsageBadgeInjected } from './SubscriptionUsageBadge.js'
-import { en, zh } from './locales.js'
+import { en, ru, zh } from './locales.js'
 import type { SubscriptionsKey } from './locales.js'
 import { fastCommandDescription } from './fast-command.js'
 
@@ -68,13 +74,16 @@ export const inject = ['slots', 'connection', 'locale']
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-plugin-subscriptions: copy dictionaries')
+  // The host owns language definitions, including ru. Register only our
+  // namespace dictionary: adding ru again throws and prevents activation.
+  ctx.effect(() => ctx.locale.register(NS, 'ru', ru), 'dsh-plugin-subscriptions: ru dictionary')
   // Settings-shell nudge: the panel (nav title + header row + section body)
   // sits flush against the panel's top edge; push it down a little to leave
   // breathing room. Scoped by the settings panel's own dialog role + nav child
   // so other aria-modal dialogs (e.g. the attachment lightbox) are untouched.
   ctx.effect(() => {
     const style = document.createElement('style')
-    style.setAttribute('data-plugin', 'dsh-plugin-subscriptions')
+    style.setAttribute('data-plugin', 'dsh-plugin-subscriptions-ru')
     style.textContent = 'div[role="dialog"][aria-modal="true"]:has(> nav) { padding-top: 14px; }'
     document.head.appendChild(style)
     return () => style.remove()
@@ -144,9 +153,90 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: (sessionId: string): SubscriptionUsageBadgeInjected => ({
       rpc: connection.rpc,
-      currentModel: createCurrentModelReader(models, sessionId),
+      currentModel: createCurrentModelReader(models, sessionId)!,
     }),
   }, SubscriptionUsageBadge))
+
+  // Remaining quota for one provider group, from the same endpoints the usage
+  // badge reads. Only this plugin's providers answer; other groups stay bare.
+  const quotaFor = async (provider: string): Promise<PickerQuota | null> => {
+    if (!['codex', 'claude', 'grok', 'copilot', 'antigravity'].includes(provider)) return null
+    const id = provider as SubscriptionProvider
+    const status = await callSubscriptionsAuth<{ providers: Record<SubscriptionProvider, ProviderStatus> }>(connection.rpc, 'status', {})
+    const row = status.providers[id]
+    const account = row?.accounts.find(candidate => candidate.isDefault) ?? row?.accounts[0]
+    if (account === undefined) return null
+    const usage = await callSubscriptionsAuth<ProviderUsage>(connection.rpc, 'usage', { provider: id, account: account.key })
+    const windows = visibleUsageWindows(id, usage.windows, row?.visibleModels)
+    if (!usage.supported || windows.length === 0) return null
+    // The bar follows the shortest window the provider has — the hourly or
+    // daily session lane — never the weekly one while a shorter lane exists.
+    // A provider that does not label its lanes still exposes the length
+    // through the next reset, so the soonest reset stands in.
+    const soonest = (pool: UsageWindow[]): UsageWindow => pool.reduce((next, window) =>
+      (window.resetsAt ?? Infinity) < (next.resetsAt ?? Infinity) ? window : next)
+    const sessions = windows.filter(window => window.kind === 'session')
+    const dated = windows.filter(window => window.kind !== 'weekly' && window.resetsAt !== undefined)
+    const pool = sessions.length > 0 ? sessions
+      : dated.length > 0 ? dated
+        : windows.filter(window => window.kind !== 'weekly')
+    const shortest = soonest(pool.length > 0 ? pool : windows)
+    const weekly = windows.find(window => window.kind === 'weekly' && window.scope === undefined)
+      ?? windows.find(window => window.kind === 'weekly')
+    const lane = (window: UsageWindow): PickerQuotaWindow => ({
+      kind: window.kind,
+      ...window.scope === undefined ? {} : { scope: window.scope },
+      remainingPercent: Math.round(Math.min(100, Math.max(0, 100 - window.usedPercent))),
+      ...window.resetsAt === undefined ? {} : { resetsAt: window.resetsAt },
+    })
+    return {
+      remainingPercent: lane(shortest).remainingPercent,
+      windows: [lane(shortest), ...weekly !== undefined && weekly !== shortest ? [lane(weekly)] : []],
+    }
+  }
+
+  // The composer model seat. priority -1 outranks the shipped selector, so
+  // this plugin's picker is the one that opens; it reads the same per-session
+  // directory, and subagent composers keep the host seat (available: false).
+  ctx.slots.inject('conversation.input.model', () => ctx.slots.register({
+    name: 'conversation.input.model',
+    priority: -1,
+    registrant: 'dsh-plugin-subscriptions-ru',
+    locale: NS,
+    inject: (sessionId: string): ModelPickerInjected => {
+      try {
+        const models = ctx.get('modelDirectories') as {
+          directoryFor?: (id: string) => { store: PickerDirectory; load: () => Promise<unknown>; select: (selection: unknown) => Promise<unknown> }
+        } | undefined
+        const sessions = ctx.get('sessions') as { subagentAddress?: (id: string) => unknown } | undefined
+        if (models === undefined || typeof models.directoryFor !== 'function') {
+          return { available: false, directory: null, load: () => {}, select: () => Promise.resolve(false) }
+        }
+        const directory = models.directoryFor(sessionId)
+        const available = sessions === undefined || typeof sessions.subagentAddress !== 'function'
+          || sessions.subagentAddress(sessionId) === undefined
+        return {
+          available,
+          directory: directory.store,
+          quotaFor,
+          load: () => { if (available) directory.load().catch(() => { /* surfaced on the store */ }) },
+          select: selection => available
+            ? directory.select(selection).then(() => true, () => false)
+            : Promise.resolve(false),
+        }
+      } catch {
+        return { available: false, directory: null, load: () => {}, select: () => Promise.resolve(false) }
+      }
+    },
+  }, ModelPicker))
+
+  // Add a quota button without replacing the shell's SINGLE profile launcher.
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: 'subscription-usage-launcher',
+    locale: NS,
+    inject: (): SubscriptionUsageBadgeInjected => ({ rpc: connection.rpc, surface: 'account-menu' }),
+  }, SidebarUsageLauncher))
 
   // The /fast slash command offers the same Standard/Fast choice as a popup.
   // `available` is synchronous and sees only the session id, so the command

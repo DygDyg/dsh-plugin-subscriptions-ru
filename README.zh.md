@@ -1,6 +1,8 @@
-# dsh-plugin-subscriptions [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+# Grok Codex Claude [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 [English](README.md) | 中文
+
+[dsh-plugin-subscriptions](https://github.com/V1ki/dsh-plugin-subscriptions) 的俄语版本：内置模型选择、推理等级和剩余额度。包名是 `dsh-plugin-subscriptions-ru`。
 
 把你的 **ChatGPT(Codex)**、**Claude**、**Grok(X Premium)**、**GitHub Copilot** 和 **Google Antigravity** 订阅当作 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 LLM provider 使用 —— 不需要 API key。Codex、Grok 和 Antigravity 通过 dsh web 界面 OAuth 登录(设置 → 订阅);Copilot 使用 GitHub OAuth 设备码流程;Claude 在存在 Claude Code 会话时直接导入凭据(macOS Keychain 或 `~/.claude/.credentials.json`),否则回退到同样的浏览器 OAuth 流程,因此不要求安装 Claude Code CLI。Token 保存在 `~/.dsh/plugins/subscriptions/auth.json`(权限 0600),过期自动刷新。
 
@@ -9,6 +11,8 @@
 在 **设置 → 订阅 → 管理** 顶部修改订阅显示名，在 **编辑模型列表** 中修改模型显示名；使用同一组保存／取消按钮，留空或恢复默认后保存可恢复原名。名称按服务商和模型 ID 存储在原有 `provider-settings.json`，跨重启和目录刷新保留。名称为最多 80 字符的单行文本，仅改变显示，不改变 provider、模型 ID、推理参数或账号路由；现有账号别名可继续独立使用。
 
 订阅显示名也用于原生模型选择器的服务商分组标题；清空显示名并保存后，分组恢复为服务商默认名称。
+
+侧边栏账号按钮上方的独立用量图标会打开限额弹窗，仅显示已连接且提供用量接口的订阅账号，不替换原有账号／设置按钮。点击“刷新”可重新查询，按 Escape 或点击外部关闭。没有用量接口的 provider 不显示。当前 shell 没有可追加的底部 slot，因此通过 overlay 将独立行挂载在底部按钮旁，卸载时移除。
 
 ## 演示
 

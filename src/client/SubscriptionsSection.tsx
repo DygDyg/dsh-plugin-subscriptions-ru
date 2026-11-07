@@ -145,6 +145,17 @@ export interface SubscriptionsSectionInjected {
  */
 export type SubscriptionsSectionProps = Partial<SubscriptionsSectionInjected>
 
+/** Circular-arrow glyph for the usage refresh button; spins while a refresh runs. */
+function RefreshGlyph({ spinning }: { spinning: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden
+      style={spinning ? { animation: 'dsh-subscription-spin 0.8s linear infinite' } : undefined}>
+      <path d="M13.5 8a5.5 5.5 0 1 1-1.3-3.55" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M13.6 1.8v3h-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 /** Card display metadata, in page order (names are brand names, not translated). */
 const PROVIDERS: readonly { id: SubscriptionProvider; name: string }[] = [
   { id: 'codex', name: 'Codex (ChatGPT)' },
@@ -212,7 +223,10 @@ const styles: Record<string, CSSProperties> = {
   usageHeader: { display: 'flex', alignItems: 'center', gap: 8 },
   usageTitle: { fontSize: 12, lineHeight: '18px', fontWeight: 500, color: 'var(--dsw-alias-label-secondary)' },
   usagePlan: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' },
-  usageRefresh: { minHeight: 22, height: 22, padding: '0 8px', marginLeft: 'auto' },
+  usageRefresh: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 22, minWidth: 22, height: 22, minHeight: 22, padding: 0, marginLeft: 'auto', borderRadius: '50%',
+  },
   usageRow: { display: 'flex', flexDirection: 'column', gap: 3 },
   usageMeta: {
     display: 'flex', justifyContent: 'space-between', gap: 8,
@@ -827,7 +841,7 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
 
   return (
     <div className="dsh-subscriptions-settings" style={styles.section}>
-      <style>{providerSettingsCss}</style>
+      <style>{providerSettingsCss}{'@keyframes dsh-subscription-spin { to { transform: rotate(360deg); } }'}</style>
       <p style={styles.intro}>{t('intro')}</p>
       <UsageBadgeDisplaySetting t={t} />
       <div style={styles.proxyCard}>
@@ -920,11 +934,14 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
                         )}
                         <button
                           type="button"
+                          className="dsh-subscription-icon-button"
                           style={styles.usageRefresh}
                           disabled={usageLoading[usageKey] === true}
+                          aria-label={t('usageRefresh')}
+                          title={t('usageRefresh')}
                           onClick={() => { void loadUsage(id, account.key, true) }}
                         >
-                          {t('usageRefresh')}
+                          <RefreshGlyph spinning={usageLoading[usageKey] === true} />
                         </button>
                       </div>
                       {usage === undefined && usageError === undefined && (

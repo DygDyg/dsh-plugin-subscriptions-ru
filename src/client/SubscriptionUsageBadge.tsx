@@ -21,7 +21,7 @@
  * user-visible string goes through the locale `t` of the
  * 'settings.subscriptions' namespace.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { ComponentType, CSSProperties } from 'react'
 import { subscriptionChromeCss } from './provider-settings-styles.js'
 import { createPortal } from 'react-dom'
@@ -65,11 +65,13 @@ export interface SubscriptionUsageBadgeInjected {
   /** Connection RPC caller to reach the `subscriptions-auth` endpoints. */
   rpc: ConnectionHandle['rpc']
   /** Resolve the session's effective provider and model together. */
-  currentModel: () => Promise<{ provider: string; model: string } | undefined>
+  currentModel?: () => Promise<{ provider: string; model: string } | undefined>
+  /** Render as a compact account-menu view instead of a composer dock badge. */
+  surface?: 'dock' | 'account-menu'
 }
 
-/** Props delivered by the slot outlet + inject + the locale seat. */
-export type SubscriptionUsageBadgeProps = PropsRuntime<'conversation.composer.dock'>
+/** Props delivered by the dock or the independent sidebar launcher. */
+export type SubscriptionUsageBadgeProps = Partial<PropsRuntime<'conversation.composer.dock'>>
   & Partial<SubscriptionUsageBadgeInjected>
   & Partial<PropsLocale<'settings.subscriptions'>>
 
@@ -128,7 +130,7 @@ const PROVIDER_NAMES: Record<SubscriptionProvider, string> = {
 export function createCurrentModelReader(
   models: () => ModelDirectoriesLike | undefined,
   sessionId: string,
-): SubscriptionUsageBadgeInjected['currentModel'] {
+): NonNullable<SubscriptionUsageBadgeInjected['currentModel']> {
   return async () => {
     const directories = models()
     if (directories === undefined) return undefined
@@ -142,13 +144,13 @@ export function createCurrentModelReader(
  * "6d 18h" (days+hours), "1h 58m" (hours+minutes), or "42m" (minutes only).
  * Falls back to the scope/kind abbreviation when no reset time is known.
  */
-export function windowLabel(w: UsageWindow): string {
+export function windowLabel(w: UsageWindow, t: Translate = fallbackTranslate): string {
   if (w.resetsAt === undefined) {
     if (w.scope !== undefined && w.scope !== '') return w.scope
     switch (w.kind) {
-      case 'session': return '5h'
-      case 'weekly': return 'Wk'
-      default: return 'W'
+      case 'session': return t('usageCompactHours')
+      case 'weekly': return t('usageCompactWeekly')
+      default: return t('usageCompactWindow')
     }
   }
   const ms = Math.max(0, w.resetsAt - Date.now())
@@ -197,7 +199,7 @@ export function compactSegment(d: ProviderUsageDisplay, model?: string, t: Trans
     const parts = matching.slice(0, 2).map(w => `${w.kind === 'weekly' ? t('usageWeekly') : t('usageWindow')} ${usedPercent(w)}%`)
     return `${d.name} ${parts.join(' · ')}`
   }
-  const parts = windows.slice(0, 2).map(w => `${windowLabel(w)} ${usedPercent(w)}%`)
+  const parts = windows.slice(0, 2).map(w => `${windowLabel(w, t)} ${usedPercent(w)}%`)
   if (windows.length > 2) parts.push(`+${windows.length - 2}`)
   return `${d.name} ${parts.join(' · ')}`
 }
@@ -264,9 +266,12 @@ function usageWindowLabel(t: Translate, window: UsageWindow): string {
  * every provider's accounts and their windows. Returns null when no data is
  * available.
  */
-export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsageBadgeProps) {
+export function SubscriptionUsageBadge({ rpc, currentModel, t, surface = 'dock' }: SubscriptionUsageBadgeProps) {
   const translate: Translate = t ?? fallbackTranslate
+  const dialogId = useId()
   const [displays, setDisplays] = useState<ProviderUsageDisplay[]>([])
+  const [usageLoading, setUsageLoading] = useState(false)
+  const [usageError, setUsageError] = useState(false)
   const [selection, setSelection] = useState<ModelSelection | undefined>(undefined)
   const [lastSubscription, setLastSubscription] = useState<ModelSelection | undefined>(undefined)
   const displayMode = useUsageBadgeMode()
@@ -283,8 +288,8 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
   const seatRef = useRef<HTMLSpanElement | null>(null)
   // The inject face may be re-evaluated (new callback identities) on
   // re-render; the model poll mounts once and reads through this ref.
-  const currentRef = useRef(currentModel)
-  currentRef.current = currentModel
+  const currentRef = useRef(currentModel ?? (async () => undefined))
+  currentRef.current = currentModel ?? (async () => undefined)
   // Last-known-good windows per account (keyed `provider:accountKey`), kept
   // across a failed poll (e.g. a 429 during the server's own negative-cache
   // cooldown) so a row doesn't flicker away — it only disappears once the
@@ -297,6 +302,8 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
   const refresh = useCallback(async (): Promise<void> => {
     if (rpc === undefined || inflightRef.current) return
     inflightRef.current = true
+    setUsageLoading(true)
+    setUsageError(false)
     const revision = namesRevision.current
     try {
       const statusResp = await callSubscriptionsAuth<{
@@ -373,8 +380,10 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
       }))
     } catch {
       // A failed poll must not crash the badge; keep last known state.
+      setUsageError(true)
     } finally {
       inflightRef.current = false
+      setUsageLoading(false)
     }
   }, [rpc])
 
@@ -396,14 +405,14 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
 
   // Hidden renders nothing, so it polls nothing; showing it again refreshes at once.
   useEffect(() => {
-    if (displayMode === 'hidden') return
+    if (surface === 'dock' && displayMode === 'hidden') return
     void refresh()
     const timer = setInterval(() => { void refresh() }, USAGE_POLL_INTERVAL_MS)
     return () => { clearInterval(timer) }
-  }, [refresh, displayMode])
+  }, [refresh, displayMode, surface])
 
   useEffect(() => {
-    if (currentRef.current === undefined) return
+    if (surface === 'account-menu' || currentModel === undefined) return
     let cancelled = false
     let inflight = false
     const reload = (): void => {
@@ -431,12 +440,16 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
   useDismissOnOutsidePointer(rootRef, open, setOpen, panelRef)
   useEffect(() => {
     if (!open) return
+    if (surface === 'account-menu') panelRef.current?.focus({ preventScroll: true })
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') {
+        setOpen(false)
+        if (surface === 'account-menu') rootRef.current?.querySelector('button')?.focus()
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => { document.removeEventListener('keydown', onKeyDown) }
-  }, [open])
+  }, [open, surface])
 
   // Sit on the host's stats row when there is one. Every dock entry is its
   // own row in the composer bar, so a badge rendered in place lands under the
@@ -459,24 +472,77 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
   }, [])
 
   useEffect(() => {
-    if (displayMode === 'hidden') setOpen(false)
-  }, [displayMode])
+    if (surface === 'dock' && displayMode === 'hidden') setOpen(false)
+  }, [displayMode, surface])
 
   const seat = <span ref={seatRef} style={styles.seat} aria-hidden />
   const collapsed = collapsedDisplays(displays, badgeSelection?.provider)
-  if (displayMode === 'hidden' || collapsed.length === 0) return seat
+  const menuSurface = surface === 'account-menu'
+  if (!menuSurface && (displayMode === 'hidden' || collapsed.length === 0)) return seat
+  if (menuSurface && displays.length === 0 && !usageLoading && !usageError) return null
 
-  const label = compactSegment(collapsed[0]!, badgeSelection?.model, translate)
+  const label = collapsed.length > 0 ? compactSegment(collapsed[0]!, badgeSelection?.model, translate) : translate('usageTitle')
   // The dialog opens from the badge, so it follows the provider and model the
   // badge shows (a retained subscription when the current model is not one).
-  const expanded = expandedDisplays(displays, badgeSelection?.provider)
-  const title = translate('usageBadgeTitle')
+  const expanded = menuSurface ? displays : expandedDisplays(displays, badgeSelection?.provider)
+  const title = menuSurface ? translate('usageTitle') : translate('usageBadgeTitle')
 
   const toggle = (): void => {
     const next = !open
     setOpen(next)
     if (next) void refresh()
   }
+
+  if (menuSurface) return (
+    <span ref={rootRef} style={styles.sidebarAnchor}>
+      <style>{sidebarUsageCss}</style>
+      <button type="button" className="dsh-subscription-sidebar-button" aria-label={translate('usageBadgeTitle')}
+        title={translate('usageBadgeTitle')} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? dialogId : undefined}
+        onClick={toggle}>
+        <UsageBadgeIcon />
+      </button>
+      {open && createPortal(
+    <section ref={panelRef} role="dialog" id={dialogId} aria-label={title} tabIndex={-1}
+      style={{ ...styles.panel, ...styles.menuSummary, ...(pos ?? MEASURE_STYLE) }}>
+      <header style={styles.menuHeader}>
+        <strong>{title}</strong>
+        <button type="button" className="dsh-subscription-menu-refresh" disabled={usageLoading}
+          aria-label={translate('usageRefresh')} title={translate('usageRefresh')}
+          onClick={() => { void refresh() }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden
+            data-spinning={usageLoading}>
+            <path d="M13.5 8a5.5 5.5 0 1 1-1.3-3.55" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M13.6 1.8v3h-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </header>
+      {usageError && <p role="status" style={styles.menuHint}>{translate('usageMenuRefreshFailed')}</p>}
+      {expanded.map(display => (
+        <section key={display.provider} style={styles.menuProvider}>
+          <strong>{display.name}</strong>
+          {display.accounts.map(account => (
+            <div key={account.key} style={styles.menuAccount}>
+              <span style={styles.menuAccountName}>{account.account ?? account.key}{account.isDefault ? ` · ${translate('defaultBadge')}` : ''}</span>
+              {account.plan && <span style={styles.menuHint}>{translate('usagePlan', { plan: account.plan })}</span>}
+              {account.windows.length === 0
+                ? <span style={styles.menuHint}>{translate('usageNoVisibleModels')}</span>
+                : account.windows.map((window, index) => (
+                  <div key={`${window.kind}:${window.scope ?? ''}:${index}`} style={styles.menuQuota}>
+                    <span>{usageWindowLabel(translate, window)}</span>
+                    <span>{Math.max(0, 100 - usedPercent(window))}% {translate('usageRemaining')}</span>
+                    <div style={styles.menuBar}>
+                      <div style={{ ...styles.barFill, width: `${100 - usedPercent(window)}%`, background: usageBarColor(usedPercent(window)) }} />
+                    </div>
+                    {window.resetsAt !== undefined && <small style={styles.menuHint}>{translate('usageResets', { date: new Date(window.resetsAt).toLocaleString() })}</small>}
+                  </div>
+                ))}
+            </div>
+          ))}
+        </section>
+      ))}
+    </section>, document.body)}
+    </span>
+  )
 
   const pill = (
     <span ref={rootRef} style={styles.anchor}>
@@ -577,7 +643,7 @@ function AccountMeta({ account, translate }: { account: AccountUsageDisplay; tra
     .filter((part): part is string => part !== undefined && part !== '')
   return (
     <span style={styles.providerMeta} title={account.account}>
-      {account.isDefault && <span style={styles.defaultStar} aria-label="default">★ </span>}
+      {account.isDefault && <span style={styles.defaultStar} aria-label={translate('defaultBadge')}>★ </span>}
       {parts.join(' · ')}
     </span>
   )
@@ -592,7 +658,7 @@ export function AccountWindows({ windows, model, provider, translate }: {
   const rows = (items: readonly UsageWindow[]) => (
     <dl style={styles.details}>
       {items.map((w, i) => (
-        <WindowRow key={i} label={`${usageWindowLabel(translate, w)}${model !== undefined && w.scope === model ? ` · ${translate('usageBadgeCurrent')}` : ''}`} window={w} />
+        <WindowRow key={i} label={`${usageWindowLabel(translate, w)}${model !== undefined && w.scope === model ? ` · ${translate('usageBadgeCurrent')}` : ''}`} window={w} translate={translate} />
       ))}
     </dl>
   )
@@ -606,14 +672,14 @@ export function AccountWindows({ windows, model, provider, translate }: {
 }
 
 /** One `dt`/`dd` pair: window name → `25% · 6d 1h`, with the bar underneath. */
-function WindowRow({ label, window: w }: { label: string; window: UsageWindow }) {
+function WindowRow({ label, window: w, translate }: { label: string; window: UsageWindow; translate: Translate }) {
   const percent = usedPercent(w)
   return (
     <>
       <dt style={styles.dt}>{label}</dt>
       <dd style={styles.dd}>
         {percent}%
-        {w.resetsAt !== undefined && <span style={styles.reset}> · {windowLabel(w)}</span>}
+        {w.resetsAt !== undefined && <span style={styles.reset}> · {windowLabel(w, translate)}</span>}
       </dd>
       <div style={styles.bar} aria-hidden>
         <div style={{ ...styles.barFill, width: `${percent}%`, background: usageBarColor(percent) }} />
@@ -628,9 +694,43 @@ function WindowRow({ label, window: w }: { label: string; window: UsageWindow })
  */
 const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
 
+const sidebarUsageCss = `
+.dsh-subscription-sidebar-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 7px; border: none; border-radius: 8px;
+  background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer;
+}
+.dsh-subscription-sidebar-button svg { width: 18px; height: 18px; }
+.dsh-subscription-sidebar-button:hover,
+.dsh-subscription-sidebar-button[aria-expanded="true"] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.dsh-subscription-sidebar-button:focus-visible {
+  outline: 2px solid var(--dsw-alias-label-secondary); outline-offset: 2px;
+}
+.dsh-subscription-menu-refresh {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 22px; height: 22px; padding: 0; border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 50%; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer;
+}
+.dsh-subscription-menu-refresh:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dsh-subscription-menu-refresh:disabled { opacity: 0.5; cursor: default; }
+.dsh-subscription-menu-refresh svg[data-spinning="true"] { animation: dsh-subscription-spin 0.8s linear infinite; }
+@keyframes dsh-subscription-spin { to { transform: rotate(360deg); } }
+`
+
 const styles: Record<string, CSSProperties> = {
+  sidebarAnchor: { display: 'flex', margin: '0 8px 4px', width: 32, flexShrink: 0 },
   seat: { display: 'none' },
   anchor: { minWidth: 0, maxWidth: '100%', display: 'inline-flex' },
+  menuSummary: { minWidth: 0, padding: '8px 12px', display: 'grid', gap: 8, fontSize: 12, lineHeight: '18px' },
+  menuHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  menuProvider: { display: 'grid', gap: 4, paddingTop: 6, borderTop: '1px solid var(--dsw-alias-border-l2)' },
+  menuAccount: { display: 'grid', gap: 3, padding: '3px 0 6px 8px' },
+  menuAccountName: { overflowWrap: 'anywhere', color: 'var(--dsw-alias-label-secondary)' },
+  menuQuota: { display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: '2px 8px' },
+  menuHint: { gridColumn: '1 / -1', margin: 0, color: 'var(--dsw-alias-label-tertiary)' },
+  menuBar: { gridColumn: '1 / -1', height: 4, borderRadius: 2, overflow: 'hidden', background: 'var(--dsw-alias-border-l2)' },
   // Mirrors the host StatsPills pill so the badge reads as a sibling of the
   // shipped time/token pills.
   pill: {
@@ -646,10 +746,12 @@ const styles: Record<string, CSSProperties> = {
     color: 'var(--dsw-alias-label-secondary)',
   },
   label: { textOverflow: 'ellipsis', minWidth: 0, overflow: 'hidden' },
-  // Mirrors the host stat-dialog panel.
+  // Mirrors the host stat-dialog panel, but on an opaque layer: the host menu
+  // token is translucent and the conversation bled through the quota dialog.
   panel: {
     position: 'fixed', zIndex: 1100, boxSizing: 'border-box',
-    background: 'var(--dsw-specific-menu)',
+    background: 'var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base))',
+    backdropFilter: 'none', WebkitBackdropFilter: 'none',
     width: 'max-content', minWidth: 'min(300px, 100vw - 24px)', maxWidth: 'min(440px, 100vw - 24px)',
     maxHeight: 'min(560px, 100dvh - 24px)', overflowY: 'auto', overscrollBehavior: 'contain',
     boxShadow: 'var(--dsw-elevation-prominent)',
