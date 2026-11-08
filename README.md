@@ -47,16 +47,31 @@
 
 ## Установка
 
-Сборка рассчитана на DSH `0.2.0-rc.2` и новее. Линия `0.1.x` не поддерживается.
+Нужен DeepSeek Harness `0.2.0-rc.2` или новее. Версия `0.1.x` не поддерживается.
 
-```sh
-git clone https://github.com/DygDyg/dsh-plugin-subscriptions-ru.git
-cd dsh-plugin-subscriptions-ru
-pnpm install && pnpm build
-dsh plugin --profile desktop add ./dsh-plugin-subscriptions-ru
+### Через меню
+
+1. Откройте **Настройки → Плагины → Добавить плагин**.
+2. Вставьте адрес:
+
+```text
+github:DygDyg/dsh-plugin-subscriptions-ru
 ```
 
-После установки или обновления перезапустите DSH.
+3. Оставьте **Официальный реестр npm** и нажмите **Установить**.
+4. Если появится запрос на сборку, разрешите её и повторите установку.
+5. Перезапустите DeepSeek Harness.
+6. Откройте **Настройки → Подписки** и войдите в свои аккаунты.
+
+Имя пакета вводить не нужно: плагин устанавливается из GitHub, а не из npm.
+
+### Через командную строку
+
+```sh
+dsh plugin --profile desktop add github:DygDyg/dsh-plugin-subscriptions-ru
+```
+
+Если профиль называется иначе, замените `desktop` его именем. После установки перезапустите DeepSeek Harness.
 
 ## Использование
 
@@ -88,11 +103,9 @@ dsh plugin --profile desktop add ./dsh-plugin-subscriptions-ru
 
 ## Обновление
 
-```sh
-git pull && pnpm install && pnpm build
-```
+Удалите плагин в **Настройки → Плагины** и установите его заново тем же адресом GitHub. Затем перезапустите DeepSeek Harness.
 
-После сборки перезапустите DSH.
+Через командную строку повторите команду установки: она заново загрузит и соберёт источники.
 
 ## Разработка
 
