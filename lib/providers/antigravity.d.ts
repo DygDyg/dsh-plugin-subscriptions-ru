@@ -35,7 +35,7 @@ export interface AntigravityRuntimeConfig {
     /** Activate an eligible account when loadCodeAssist has no project yet. */
     onboard?: boolean;
 }
-/** Resolve a client pair: plugin config, environment, then the public desktop default. */
+/** Resolve one complete client pair from plugin config, otherwise from the environment. */
 export declare function resolveAntigravityOAuthConfig(config?: Partial<AntigravityOAuthConfig>): AntigravityOAuthConfig;
 /** Normalize the configured API origin and reject paths/credentials. */
 export declare function antigravityBaseURL(value?: string): string;
