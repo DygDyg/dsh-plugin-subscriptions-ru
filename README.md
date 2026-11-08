@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="icon.webp" alt="Grok Codex Claude" width="128">
+</p>
+
 # Grok Codex Claude
 
 Русский интерфейс подписок **ChatGPT (Codex)**, **Claude**, **Grok**, **GitHub Copilot** и **Google Antigravity** для [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). Пакет публикуется как `dsh-plugin-subscriptions-ru`.
