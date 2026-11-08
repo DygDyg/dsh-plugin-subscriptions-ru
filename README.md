@@ -1,10 +1,10 @@
-# Grok Codex Claude [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+# Grok Codex Claude
+
+Русский интерфейс подписок **ChatGPT (Codex)**, **Claude**, **Grok**, **GitHub Copilot** и **Google Antigravity** для [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). Пакет публикуется как `dsh-plugin-subscriptions-ru`.
+
+В сборку входят встроенный выбор модели, ползунок уровня рассуждений и окно оставшихся квот. Ключ API не нужен: Codex, Grok и Antigravity входят через OAuth, Copilot — через код устройства GitHub, а Claude может использовать уже открытый сеанс Claude Code. Для Antigravity нужно заранее указать собственный OAuth-клиент. Токены хранятся в `~/.dsh/plugins/subscriptions/auth.json` и обновляются автоматически.
 
 English | [中文](README.zh.md)
-
-Русская сборка [dsh-plugin-subscriptions](https://github.com/V1ki/dsh-plugin-subscriptions): встроенный выбор модели, уровень рассуждений и оставшиеся квоты. Пакет публикуется как `dsh-plugin-subscriptions-ru`.
-
-Use your **ChatGPT (Codex)**, **Claude**, **Grok (X Premium)**, **GitHub Copilot**, and **Google Antigravity** subscriptions as LLM providers in [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — no API keys. Codex, Grok, and Antigravity log in via OAuth in the dsh web UI (Settings → Subscriptions), while Copilot uses the GitHub OAuth device flow; Claude imports credentials from an existing Claude Code session when there is one (macOS Keychain or `~/.claude/.credentials.json`) and otherwise falls back to the same browser OAuth flow, so the Claude Code CLI is not required. Tokens live at `~/.dsh/plugins/subscriptions/auth.json` (mode 0600) and refresh automatically.
 
 ## Subscription and model display names
 
@@ -14,27 +14,11 @@ Subscription display names also label provider groups in the native model picker
 
 A separate quota icon above the sidebar profile button opens a popup for connected subscription accounts that report usage. The original profile/settings launcher is left intact. Use **Refresh** to request a fresh snapshot; press Escape or click outside to dismiss. Providers without a usage endpoint are omitted. The current shell has no additive footer slot, so the overlay contribution portals its own row beside the footer launcher and removes it on disposal.
 
-## Demo
+## Как выглядит
 
-Settings → **Subscriptions**: per-provider login/logout, no API keys. Claude imports credentials from Claude Code when available and otherwise uses OAuth, as Codex and Grok always do (settings screenshots use demo accounts and catalog data):
+Значок на боковой панели открывает окно «Использование». Для каждого подключённого аккаунта показаны оставшийся процент и время сброса; адреса аккаунтов на снимке скрыты:
 
-![Subscriptions settings page](https://raw.githubusercontent.com/V1ki/dsh-plugin-subscriptions/main/docs/images/subscriptions.png)
-
-Configure visibility, default reasoning effort, and context together in **Edit model list**, with shared Save and Cancel actions:
-
-![Model settings](https://raw.githubusercontent.com/V1ki/dsh-plugin-subscriptions/main/docs/images/model-settings.png)
-
-Configure image generation, video generation, and X search per provider. Tool switches apply only to sessions created after saving:
-
-![Provider tools](https://raw.githubusercontent.com/V1ki/dsh-plugin-subscriptions/main/docs/images/provider-tools.png)
-
-Logged-in providers join the session model picker with their live model catalogs:
-
-![Model picker with subscription models](https://raw.githubusercontent.com/V1ki/dsh-plugin-subscriptions/main/docs/images/model-picker.png)
-
-Models that advertise reasoning levels get an **Effort** selector in the same menu — Codex models, Grok 4.6 / 4.5, and Copilot's reasoning models (levels and defaults come from each provider's live catalog, not a hardcoded list; Copilot's `capabilities.supports.reasoning_effort` array is sent as `reasoning_effort` on chat completions and `reasoning.effort` on the Responses wire). Models listing both Copilot endpoints (gpt-5.4, gpt-5-mini) normally speak chat completions but reroute to `/responses` when a request combines function tools with an effort — Copilot rejects that combination on the chat wire:
-
-![Reasoning effort selector](https://raw.githubusercontent.com/V1ki/dsh-plugin-subscriptions/main/docs/images/model-effort.png)
+![Окно оставшихся квот](docs/images/usage-windows.png)
 
 Codex models whose catalog advertises the fast tier (the codex CLI's fast mode) get a **Speed** toggle in the composer's tool row, next to the model selector — Standard or Fast (`service_tier: priority`), per session. The `/fast` slash command offers the same choice as a popup; it errors with an explanation when the current model has no fast tier.
 
