@@ -45,7 +45,7 @@ import type {
   UsageWindow,
 } from './common.js'
 import { proxiedFetch } from '../http.js'
-import { ANTIGRAVITY_DEFAULT_CLIENT_ID, ANTIGRAVITY_DEFAULT_CLIENT_SECRET } from './antigravity-oauth-client.js'
+
 import { AccountTokenManager, DISCOVERY_TIMEOUT_MS, unionAccountCatalogs } from './accounts.js'
 import type { PoolAdapter } from './pool.js'
 import { DEFAULT_RATE_LIMIT_WAIT, DEFAULT_RETRY, subscriptionRetryPolicy } from './rate-limit.js'
@@ -88,14 +88,14 @@ export interface AntigravityRuntimeConfig {
   onboard?: boolean
 }
 
-/** Resolve a client pair: plugin config, environment, then the public desktop default. */
+/** Resolve one complete client pair from plugin config, otherwise from the environment. */
 export function resolveAntigravityOAuthConfig(config?: Partial<AntigravityOAuthConfig>): AntigravityOAuthConfig {
   const configuredId = config?.clientId?.trim()
   const configuredSecret = config?.clientSecret?.trim()
   const environmentId = process.env.ANTIGRAVITY_CLIENT_ID?.trim()
   const environmentSecret = process.env.ANTIGRAVITY_CLIENT_SECRET?.trim()
   if (configuredId) {
-    // A custom PKCE-only client must never inherit a different client's secret.
+    // A configured client must never inherit a secret from another source.
     return { clientId: configuredId, ...configuredSecret ? { clientSecret: configuredSecret } : {} }
   }
   if (configuredSecret) throw new Error('config.antigravity.clientSecret requires config.antigravity.clientId')
@@ -103,7 +103,7 @@ export function resolveAntigravityOAuthConfig(config?: Partial<AntigravityOAuthC
     return { clientId: environmentId, ...environmentSecret ? { clientSecret: environmentSecret } : {} }
   }
   if (environmentSecret) throw new Error('ANTIGRAVITY_CLIENT_SECRET requires ANTIGRAVITY_CLIENT_ID')
-  return { clientId: ANTIGRAVITY_DEFAULT_CLIENT_ID, clientSecret: ANTIGRAVITY_DEFAULT_CLIENT_SECRET }
+  throw new Error('Antigravity login requires config.antigravity.clientId or ANTIGRAVITY_CLIENT_ID')
 }
 
 /** Normalize the configured API origin and reject paths/credentials. */

@@ -609,14 +609,14 @@ test('auth RPC: an unknown provider is rejected, not dispatched', async () => {
 })
 
 
-test('login(antigravity): no client configuration opens the Google PKCE authorization flow', async () => {
-  await inIsolatedHome(() => withEnv('ANTIGRAVITY_CLIENT_ID', '', () => withEnv('ANTIGRAVITY_CLIENT_SECRET', '', async () => {
+test('login(antigravity): a configured client opens the Google PKCE authorization flow', async () => {
+  await inIsolatedHome(() => withEnv('ANTIGRAVITY_CLIENT_ID', 'test-client.apps.googleusercontent.com', () => withEnv('ANTIGRAVITY_CLIENT_SECRET', '', async () => {
     const controller = makeController(() => undefined)
     try {
       const { authorizeUrl } = await controller.login('antigravity')
       const url = new URL(authorizeUrl)
       assert.equal(url.origin + url.pathname, 'https://accounts.google.com/o/oauth2/v2/auth')
-      assert.match(url.searchParams.get('client_id') ?? '', /\.apps\.googleusercontent\.com$/)
+      assert.equal(url.searchParams.get('client_id'), 'test-client.apps.googleusercontent.com')
       assert.equal(url.searchParams.get('code_challenge_method'), 'S256')
       assert.equal(url.searchParams.get('access_type'), 'offline')
       assert.ok((url.searchParams.get('state') ?? '').length >= 43)

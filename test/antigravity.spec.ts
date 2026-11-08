@@ -747,10 +747,8 @@ test('Antigravity OAuth selects defaults or one complete override source without
   try {
     delete process.env.ANTIGRAVITY_CLIENT_ID
     delete process.env.ANTIGRAVITY_CLIENT_SECRET
-    const defaults = resolveAntigravityOAuthConfig()
-    assert.match(defaults.clientId, /\.apps\.googleusercontent\.com$/)
-    assert.ok(defaults.clientSecret && defaults.clientSecret.length > 10)
-    assert.deepEqual(resolveAntigravityOAuthConfig({ clientId: '  ', clientSecret: ' ' }), defaults)
+    assert.throws(() => resolveAntigravityOAuthConfig(), /requires config\.antigravity\.clientId or ANTIGRAVITY_CLIENT_ID/)
+    assert.throws(() => resolveAntigravityOAuthConfig({ clientId: '  ', clientSecret: ' ' }), /requires config\.antigravity\.clientId or ANTIGRAVITY_CLIENT_ID/)
     assert.deepEqual(resolveAntigravityOAuthConfig(oauth), oauth)
     assert.deepEqual(resolveAntigravityOAuthConfig({ clientId: 'pkce-client' }), { clientId: 'pkce-client' })
     process.env.ANTIGRAVITY_CLIENT_ID = ' env-client '
