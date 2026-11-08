@@ -1,5 +1,6 @@
 {
   "name": "dsh-plugin-subscriptions-ru",
+  "displayName": "Grok Codex Claude",
   "version": "0.9.12-ru.1",
   "description": "Grok Codex Claude: русский интерфейс подписок ChatGPT (Codex), Claude, Grok, GitHub Copilot и Google Antigravity для DeepSeek Harness. Встроенный выбор модели, уровень рассуждений и оставшиеся квоты.",
   "license": "MIT",
@@ -58,7 +59,6 @@
   "scripts": {
     "build": "tsc && tsdown",
     "test": "tsc -p tsconfig.test.json && node --test \"lib-test/test/**/*.spec.js\"",
-    "prepare": "tsdown -c tsdown.prepare.config.ts",
     "prepublishOnly": "pnpm build && pnpm test"
   },
   "peerDependencies": {
