@@ -37,6 +37,8 @@ import { callSubscriptionsAuth } from './subscriptions-rpc.js'
 import type { ProviderStatus, ProviderUsage, SubscriptionProvider, UsageWindow } from './SubscriptionsSection.js'
 import { visibleUsageWindows } from './usage-window-filter.js'
 import { SidebarUsageLauncher } from './SidebarUsageLauncher.js'
+import { RegionGateNotice } from './RegionGateNotice.js'
+import type { RegionGateNoticeInjected } from './RegionGateNotice.js'
 import type { SubscriptionUsageBadgeInjected } from './SubscriptionUsageBadge.js'
 import { en, ru, zh } from './locales.js'
 import type { SubscriptionsKey } from './locales.js'
@@ -156,6 +158,15 @@ export function apply(ctx: ClientContext): void {
       currentModel: createCurrentModelReader(models, sessionId)!,
     }),
   }, SubscriptionUsageBadge))
+
+  // Region warning shares the composer dock; host gates perform the rejection.
+  ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
+    name: 'conversation.composer.dock',
+    id: 'subscription-region-gate',
+    order: 0,
+    locale: NS,
+    inject: (): RegionGateNoticeInjected => ({ rpc: connection.rpc }),
+  }, RegionGateNotice))
 
   // Remaining quota for one provider group, from the same endpoints the usage
   // badge reads. Only this plugin's providers answer; other groups stay bare.

@@ -199,6 +199,9 @@ test('singleton and explicit families/tiers enforce account and model exclusion 
 
 test('a timed-out discovery falls back to the account\'s last known catalog', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'account-timeout-'))
+  // AbortSignal.timeout uses an unref'd timer; keep this process alive until
+  // the discovery timeout settles, including when the suite runs in parallel.
+  const keepAlive = setTimeout(() => {}, 100)
   try {
     class Hanging extends Raw {
       known: string[] | undefined = ['m:/模型']
@@ -218,5 +221,8 @@ test('a timed-out discovery falls back to the account\'s last known catalog', as
     assert.ok(raw.calls.includes('stream:a:m:/模型'))
     raw.known = undefined
     await assert.rejects(consume(route, 'm:/模型'), /No eligible/)
-  } finally { await rm(dir, { recursive: true, force: true }) }
+  } finally {
+    clearTimeout(keepAlive)
+    await rm(dir, { recursive: true, force: true })
+  }
 })

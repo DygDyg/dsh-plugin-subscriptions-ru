@@ -16,6 +16,7 @@ import { PROVIDER_IDS, type ProviderId } from './store.js'
 import type { ProviderUsage } from '../providers/common.js'
 import type { ProxyConfigView, ProxyDraft, ProxyInput, ProxyTestResult } from '../http.js'
 import type { CliVersion } from '../providers/npm-cli-version.js'
+import type { RegionSnapshot } from '../region-gate.js'
 
 /** Internal endpoint dispatcher used after the host authenticates an exact Fetch route. */
 export type SubscriptionsRpcHandler = (
@@ -42,6 +43,7 @@ export const SUBSCRIPTIONS_AUTH_ENDPOINTS = [
   'speed', 'setSpeed',
   'proxyGet', 'proxySet', 'proxyTest',
   'modelDefaults', 'setModelDefault',
+  'regionGate', 'setRegionGate',
 ] as const
 
 /** Media types the attachment store accepts (ImageMediaType). */
@@ -160,6 +162,11 @@ export interface ProviderSettingsController {
   visibleModels?(provider: ProviderId): string[] | undefined
   get(provider: ProviderId, force: boolean): Promise<unknown>
   set(provider: ProviderId, settings: unknown): Promise<void>
+}
+
+export interface RegionGateController {
+  get(force: boolean, signal: AbortSignal): Promise<RegionSnapshot>
+  set(blocked: unknown, signal: AbortSignal): Promise<RegionSnapshot>
 }
 
 export interface ModelDefaultsController {
@@ -475,6 +482,14 @@ function readProxyInput(payload: unknown): ProxyInput {
   }
 }
 
+/** Validate a `setRegionGate` payload. */
+function readRegionBlocked(payload: unknown): unknown {
+  if (typeof payload !== 'object' || payload === null || !('blocked' in payload)) {
+    throw new BadRequest('payload.blocked must be an array of country codes')
+  }
+  return (payload as { blocked: unknown }).blocked
+}
+
 /** Validate a `proxyTest` payload (the destination URL and an optional draft). */
 function readProxyTestPayload(payload: unknown): { url?: string; proxy?: ProxyDraft } {
   if (typeof payload !== 'object' || payload === null) return {}
@@ -528,6 +543,7 @@ async function dispatch(
   payload: unknown,
   signal: AbortSignal,
   providerSettings?: ProviderSettingsController,
+  regionGate?: RegionGateController,
 ): Promise<RpcResult<unknown>> {
   switch (endpoint) {
     case 'providerSettings':
@@ -613,6 +629,12 @@ async function dispatch(
       if (modelDefaults === undefined) throw new BadRequest('model defaults are unavailable')
       return ok(await modelDefaults.catalog(readForce(payload)))
     }
+    case 'regionGate':
+      if (regionGate === undefined) throw new BadRequest('region gate is unavailable')
+      return ok(await regionGate.get(readForce(payload), signal))
+    case 'setRegionGate':
+      if (regionGate === undefined) throw new BadRequest('region gate is unavailable')
+      return ok(await regionGate.set(readRegionBlocked(payload), signal))
     case 'setModelDefault':
       if (modelDefaults === undefined) throw new BadRequest('model defaults are unavailable')
       {
@@ -640,6 +662,7 @@ export function registerAuthRpc(
   proxy: ProxyConfigController | undefined = undefined,
   modelDefaults: ModelDefaultsController | undefined = undefined,
   providerSettings: ProviderSettingsController | undefined = undefined,
+  regionGate: RegionGateController | undefined = undefined,
 ): void {
   // `connection` is not in this plugin's inject list (headless compositions
   // lack it), so its startup order is unconstrained: defer registration until
@@ -657,7 +680,7 @@ export function registerAuthRpc(
     const connection = ctx.get('connection') as HostConnectionHandle
     const handler: SubscriptionsRpcHandler = async (endpoint, payload, signal) => {
       try {
-        return await dispatch(controller, speed, proxy, modelDefaults, endpoint, payload, signal, providerSettings)
+        return await dispatch(controller, speed, proxy, modelDefaults, endpoint, payload, signal, providerSettings, regionGate)
       } catch (error) {
         return failure(error)
       }

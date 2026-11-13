@@ -20,6 +20,7 @@ import { visibleUsageWindows } from './usage-window-filter.js'
 import { ProviderAccountManager } from './ProviderAccountManager.js'
 import { providerSettingsCss } from './provider-settings-styles.js'
 import { UsageBadgeDisplaySetting } from './UsageBadgeDisplaySetting.js'
+import { RegionGateSetting } from './RegionGateSetting.js'
 import type { SubscriptionsKey } from './locales.js'
 
 import { callSubscriptionsAuth, SubscriptionsAuthError } from './subscriptions-rpc.js'
@@ -844,6 +845,7 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
       <style>{providerSettingsCss}{'@keyframes dsh-subscription-spin { to { transform: rotate(360deg); } }'}</style>
       <p style={styles.intro}>{t('intro')}</p>
       <UsageBadgeDisplaySetting t={t} />
+      <RegionGateSetting rpc={rpc} t={t} />
       <div style={styles.proxyCard}>
         <div style={styles.cardHeader}>
           <span style={{

@@ -3,10 +3,10 @@ import { createRequire } from 'node:module'
 import { test } from 'node:test'
 import semver from 'semver'
 
-// Resolve the repository manifest through its package self-reference, including
-// when this test runs from lib-test/test after TypeScript compilation.
+// Resolve the repository manifest by path. The Russian package has its own
+// package name, so the upstream package's self-reference is not valid here.
 const require = createRequire(import.meta.url)
-const manifest = require('dsh-plugin-subscriptions/package.json') as {
+const manifest = require('../../package.json') as {
   peerDependencies: Record<string, string>
   engines?: { dsh?: string }
 }

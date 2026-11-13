@@ -13,6 +13,7 @@ import { type ProviderId } from './store.js';
 import type { ProviderUsage } from '../providers/common.js';
 import type { ProxyConfigView, ProxyDraft, ProxyInput, ProxyTestResult } from '../http.js';
 import type { CliVersion } from '../providers/npm-cli-version.js';
+import type { RegionSnapshot } from '../region-gate.js';
 /** Internal endpoint dispatcher used after the host authenticates an exact Fetch route. */
 export type SubscriptionsRpcHandler = (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult<unknown>>;
 /**
@@ -25,7 +26,7 @@ export declare const SUBSCRIPTIONS_AUTH_PREFIX = "subscriptions-auth.";
  * Every endpoint {@link dispatch} answers; each gets one exact Fetch route.
  * Kept in one place so the route table and the switch cannot drift apart.
  */
-export declare const SUBSCRIPTIONS_AUTH_ENDPOINTS: readonly ["providerSettings", "setProviderSettings", "status", "login", "manual", "cancel", "logout", "setDefault", "usage", "image", "video", "prepareReset", "consumeReset", "speed", "setSpeed", "proxyGet", "proxySet", "proxyTest", "modelDefaults", "setModelDefault"];
+export declare const SUBSCRIPTIONS_AUTH_ENDPOINTS: readonly ["providerSettings", "setProviderSettings", "status", "login", "manual", "cancel", "logout", "setDefault", "usage", "image", "video", "prepareReset", "consumeReset", "speed", "setSpeed", "proxyGet", "proxySet", "proxyTest", "modelDefaults", "setModelDefault", "regionGate", "setRegionGate"];
 /** Decoded image bytes returned by the `image` endpoint. */
 export interface ImageBytesResult {
     mediaType: string;
@@ -134,6 +135,10 @@ export interface ProviderSettingsController {
     get(provider: ProviderId, force: boolean): Promise<unknown>;
     set(provider: ProviderId, settings: unknown): Promise<void>;
 }
+export interface RegionGateController {
+    get(force: boolean, signal: AbortSignal): Promise<RegionSnapshot>;
+    set(blocked: unknown, signal: AbortSignal): Promise<RegionSnapshot>;
+}
 export interface ModelDefaultsController {
     /** Per-provider picker state for the Settings page. */
     catalog(force?: boolean): Promise<ModelDefaultsCatalog[]>;
@@ -209,4 +214,4 @@ export declare class BadRequest extends Error {
  * @param proxy - optional proxy-config controller backing `proxyGet`/`proxySet`/`proxyTest`.
  * @param modelDefaults - optional per-model default-effort state backing `modelDefaults`/`setModelDefault`.
  */
-export declare function registerAuthRpc(ctx: Context, controller: AuthController, speed: SpeedController, proxy?: ProxyConfigController | undefined, modelDefaults?: ModelDefaultsController | undefined, providerSettings?: ProviderSettingsController | undefined): void;
+export declare function registerAuthRpc(ctx: Context, controller: AuthController, speed: SpeedController, proxy?: ProxyConfigController | undefined, modelDefaults?: ModelDefaultsController | undefined, providerSettings?: ProviderSettingsController | undefined, regionGate?: RegionGateController | undefined): void;

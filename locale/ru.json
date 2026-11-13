@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Grok Codex Claude",
-    "description": "Русский интерфейс подписок ChatGPT (Codex), Claude, Grok, GitHub Copilot и Google Antigravity. Встроенный выбор модели, уровень рассуждений и оставшиеся квоты."
+    "description": "Русский интерфейс подписок ChatGPT (Codex), Claude, Grok, GitHub Copilot и Google Antigravity. Встроенный выбор модели, уровень рассуждений, оставшиеся квоты и блокировка запросов к моделям по региону IP."
   }
 }

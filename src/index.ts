@@ -9,13 +9,14 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { errorChain } from '@deepseek-ai/dsh-llm'
+import { errorChain, isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import type {
   AdapterRegistrationHandle,
   GenerateOptions,
   LlmAdapter,
   LlmModelInfo,
   LlmResolvedModelInfo,
+  StreamChunk,
 } from '@deepseek-ai/dsh-llm'
 // Type-only: activates the `ctx.tools` Context merge for the inject block.
 import type {} from '@deepseek-ai/dsh-tools'
@@ -140,6 +141,7 @@ import { createXSearchTool } from './tools/x-search.js'
 import { createImageGenerateTool } from './tools/image-generate.js'
 import { createVideoGenerateTool, videosDirectory } from './tools/video-generate.js'
 import { ensureConnectAttemptTimeout, proxiedFetch, proxyGetConfig, proxySetConfig, proxyTestConnection, restoreConnectAttemptTimeout } from './http.js'
+import { RegionGate } from './region-gate.js'
 import { ProviderSettingsStore, PROVIDER_TOOLS, validatePreferences } from './provider-settings.js'
 
 export type { ModelEntry, ProviderUsage, UsageWindow } from './providers/common.js'
@@ -713,6 +715,30 @@ export function apply(ctx: Context, config: Config): void {
   const previousAttemptTimeout = ensureConnectAttemptTimeout()
   ctx.effect(() => () => { restoreConnectAttemptTimeout(previousAttemptTimeout) }, 'dsh-plugin-subscriptions: connect attempt timeout')
   const preferences = new ProviderSettingsStore()
+  const regionGate = new RegionGate()
+  ctx.on('agent/pre-step', async (payload, next) => {
+    if (!await regionGate.enabled()) return next()
+    const verdict = await regionGate.refresh(true, payload.signal)
+    if (verdict.status === 'blocked' || verdict.status === 'error') return { kind: 'reject' }
+    return next()
+  })
+  ctx.on('llm/stream', (options, next) => {
+    if (isAgentLoopRequest(options)) return next()
+    const guarded = async function* (): AsyncIterable<StreamChunk> {
+      if (await regionGate.enabled()) {
+        const verdict = await regionGate.refresh(true, options.signal)
+        if (verdict.status === 'blocked' || verdict.status === 'error') {
+          const message = verdict.status === 'blocked'
+            ? `Model request stopped: public IP region ${verdict.countryName ?? verdict.country ?? 'unknown'} is blocked.`
+            : `Model request stopped because the public IP region could not be checked: ${verdict.error ?? 'unknown error'}`
+          yield { type: 'finish', reason: { kind: 'error', failure: { code: verdict.status === 'blocked' ? 'REGION_BLOCKED' : 'REGION_CHECK_FAILED', message } } }
+          return
+        }
+      }
+      yield* next()
+    }
+    return guarded()
+  })
   const codexVersion = new CodexClientVersionCache()
   const claudeVersion = new ClaudeCliVersionCache()
   const providers = [...new Set(config.providers ?? [...PROVIDER_IDS])]
@@ -1331,6 +1357,9 @@ export function apply(ctx: Context, config: Config): void {
       poolAdapter?.invalidate()
       for (const [route, handle] of handles) handle.replace([route])
     },
+  }, {
+    get: (force, signal) => regionGate.refresh(force, signal, force),
+    set: blocked => regionGate.save(blocked),
   })
 
   // OpenCode-style cadence: a startup check (five-minute cache freshness),
