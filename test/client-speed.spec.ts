@@ -1,7 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSpeedLoader } from '../src/client/SpeedSelect.js'
+
+test('Speed menu uses an opaque themed surface rather than the translucent host menu token', () => {
+  const source = readFileSync(new URL('../../src/client/SpeedSelect.tsx', import.meta.url), 'utf8')
+  assert.match(source, /background: 'var\(--dsw-alias-bg-layer-2, var\(--dsw-alias-bg-base\)\)'/)
+  assert.doesNotMatch(source, /background: 'var\(--dsw-specific-menu/)
+})
 
 test('Speed selector resolves a child default for the current model and rechecks model switches', async () => {
   const requests: unknown[] = []

@@ -268,7 +268,9 @@ const styles: Record<string, CSSProperties> = {
   menu: {
     position: 'absolute', bottom: '100%', right: 0, marginBottom: 4,
     minWidth: 180, padding: 4, zIndex: 20,
-    background: 'var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2))', border: 0,
+    // The host's specific-menu token can be translucent; use the same opaque
+    // themed layer as the subscription usage popup to hide content behind it.
+    background: 'var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-base))', border: 0,
     boxShadow: 'var(--dsw-elevation-prominent)', borderRadius: 'var(--dsw-radius-lg, 16px)', display: 'flex', flexDirection: 'column', gap: 2,
   },
   item: {

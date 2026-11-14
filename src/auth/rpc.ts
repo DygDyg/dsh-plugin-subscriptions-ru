@@ -43,7 +43,7 @@ export const SUBSCRIPTIONS_AUTH_ENDPOINTS = [
   'speed', 'setSpeed',
   'proxyGet', 'proxySet', 'proxyTest',
   'modelDefaults', 'setModelDefault',
-  'regionGate', 'setRegionGate',
+  'regionGate', 'setRegionGate', 'regionRecoveryList', 'regionRecoveryRetry', 'regionRecoveryRemove',
 ] as const
 
 /** Media types the attachment store accepts (ImageMediaType). */
@@ -167,6 +167,9 @@ export interface ProviderSettingsController {
 export interface RegionGateController {
   get(force: boolean, signal: AbortSignal): Promise<RegionSnapshot>
   set(blocked: unknown, signal: AbortSignal): Promise<RegionSnapshot>
+  listRecovery?(sessionId: string): Promise<unknown>
+  retryRecovery?(sessionId: string, id: string, signal: AbortSignal): Promise<void>
+  removeRecovery?(sessionId: string, id: string): Promise<void>
 }
 
 export interface ModelDefaultsController {
@@ -341,7 +344,7 @@ function readProvider(payload: unknown): ProviderId {
 }
 
 function readString(payload: unknown, field: string): string {
-  const value = (payload as Record<string, unknown>)[field]
+  const value = payload !== null && typeof payload === 'object' ? (payload as Record<string, unknown>)[field] : undefined
   if (typeof value !== 'string' || value.length === 0) {
     throw new BadRequest(`payload.${field} must be a non-empty string`)
   }
@@ -635,6 +638,17 @@ async function dispatch(
     case 'setRegionGate':
       if (regionGate === undefined) throw new BadRequest('region gate is unavailable')
       return ok(await regionGate.set(readRegionBlocked(payload), signal))
+    case 'regionRecoveryList':
+      if (!regionGate?.listRecovery) throw new BadRequest('region recovery is unavailable')
+      return ok(await regionGate.listRecovery(readString(payload, 'sessionId')))
+    case 'regionRecoveryRetry':
+      if (!regionGate?.retryRecovery) throw new BadRequest('region recovery is unavailable')
+      await regionGate.retryRecovery(readString(payload, 'sessionId'), readString(payload, 'id'), signal)
+      return ok({ ok: true })
+    case 'regionRecoveryRemove':
+      if (!regionGate?.removeRecovery) throw new BadRequest('region recovery is unavailable')
+      await regionGate.removeRecovery(readString(payload, 'sessionId'), readString(payload, 'id'))
+      return ok({ ok: true })
     case 'setModelDefault':
       if (modelDefaults === undefined) throw new BadRequest('model defaults are unavailable')
       {

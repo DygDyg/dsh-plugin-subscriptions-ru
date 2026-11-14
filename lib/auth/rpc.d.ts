@@ -26,7 +26,7 @@ export declare const SUBSCRIPTIONS_AUTH_PREFIX = "subscriptions-auth.";
  * Every endpoint {@link dispatch} answers; each gets one exact Fetch route.
  * Kept in one place so the route table and the switch cannot drift apart.
  */
-export declare const SUBSCRIPTIONS_AUTH_ENDPOINTS: readonly ["providerSettings", "setProviderSettings", "status", "login", "manual", "cancel", "logout", "setDefault", "usage", "image", "video", "prepareReset", "consumeReset", "speed", "setSpeed", "proxyGet", "proxySet", "proxyTest", "modelDefaults", "setModelDefault", "regionGate", "setRegionGate"];
+export declare const SUBSCRIPTIONS_AUTH_ENDPOINTS: readonly ["providerSettings", "setProviderSettings", "status", "login", "manual", "cancel", "logout", "setDefault", "usage", "image", "video", "prepareReset", "consumeReset", "speed", "setSpeed", "proxyGet", "proxySet", "proxyTest", "modelDefaults", "setModelDefault", "regionGate", "setRegionGate", "regionRecoveryList", "regionRecoveryRetry", "regionRecoveryRemove"];
 /** Decoded image bytes returned by the `image` endpoint. */
 export interface ImageBytesResult {
     mediaType: string;
@@ -138,6 +138,9 @@ export interface ProviderSettingsController {
 export interface RegionGateController {
     get(force: boolean, signal: AbortSignal): Promise<RegionSnapshot>;
     set(blocked: unknown, signal: AbortSignal): Promise<RegionSnapshot>;
+    listRecovery?(sessionId: string): Promise<unknown>;
+    retryRecovery?(sessionId: string, id: string, signal: AbortSignal): Promise<void>;
+    removeRecovery?(sessionId: string, id: string): Promise<void>;
 }
 export interface ModelDefaultsController {
     /** Per-provider picker state for the Settings page. */

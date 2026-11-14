@@ -38,6 +38,8 @@ import type { ProviderStatus, ProviderUsage, SubscriptionProvider, UsageWindow }
 import { visibleUsageWindows } from './usage-window-filter.js'
 import { SidebarUsageLauncher } from './SidebarUsageLauncher.js'
 import { RegionGateNotice } from './RegionGateNotice.js'
+import { RegionRecoveryCard } from './RegionRecoveryCard.js'
+import type { RegionRecoveryCardInjected } from './RegionRecoveryCard.js'
 import type { RegionGateNoticeInjected } from './RegionGateNotice.js'
 import type { SubscriptionUsageBadgeInjected } from './SubscriptionUsageBadge.js'
 import { en, ru, zh } from './locales.js'
@@ -167,6 +169,15 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: (): RegionGateNoticeInjected => ({ rpc: connection.rpc }),
   }, RegionGateNotice))
+
+  // Saved blocked requests can be retried without changing the current draft.
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'subscription-region-recovery',
+    order: 0,
+    locale: NS,
+    inject: (sessionId: string): RegionRecoveryCardInjected => ({ rpc: connection.rpc, sessionId }),
+  }, RegionRecoveryCard))
 
   // Remaining quota for one provider group, from the same endpoints the usage
   // badge reads. Only this plugin's providers answer; other groups stay bare.

@@ -142,6 +142,7 @@ import { createImageGenerateTool } from './tools/image-generate.js'
 import { createVideoGenerateTool, videosDirectory } from './tools/video-generate.js'
 import { ensureConnectAttemptTimeout, proxiedFetch, proxyGetConfig, proxySetConfig, proxyTestConnection, restoreConnectAttemptTimeout } from './http.js'
 import { RegionGate } from './region-gate.js'
+import { RegionRecovery } from './region-recovery.js'
 import { ProviderSettingsStore, PROVIDER_TOOLS, validatePreferences } from './provider-settings.js'
 
 export type { ModelEntry, ProviderUsage, UsageWindow } from './providers/common.js'
@@ -716,10 +717,23 @@ export function apply(ctx: Context, config: Config): void {
   ctx.effect(() => () => { restoreConnectAttemptTimeout(previousAttemptTimeout) }, 'dsh-plugin-subscriptions: connect attempt timeout')
   const preferences = new ProviderSettingsStore()
   const regionGate = new RegionGate()
+  const regionRecovery = new RegionRecovery()
   ctx.on('agent/pre-step', async (payload, next) => {
     if (!await regionGate.enabled()) return next()
     const verdict = await regionGate.refresh(true, payload.signal)
-    if (verdict.status === 'blocked' || verdict.status === 'error') return { kind: 'reject' }
+    if (verdict.status === 'blocked' || verdict.status === 'error') {
+      const recoverable = payload.agent.session.header.origin === 'subagent'
+        ? [] : payload.messages.filter(message => message.source.kind === 'user' && message.content.length > 0)
+      const remaining = payload.messages.filter(message => !recoverable.includes(message))
+      try {
+        await regionRecovery.save(payload.agent.id, recoverable)
+      } catch (error) {
+        if (payload.messages.length > 0) payload.agent.inbox.splice('next-step', 0, 0, [...payload.messages])
+        throw error
+      }
+      if (remaining.length > 0) payload.agent.inbox.splice('next-step', 0, 0, remaining)
+      return { kind: 'reject' }
+    }
     return next()
   })
   ctx.on('llm/stream', (options, next) => {
@@ -1360,6 +1374,14 @@ export function apply(ctx: Context, config: Config): void {
   }, {
     get: (force, signal) => regionGate.refresh(force, signal, force),
     set: blocked => regionGate.save(blocked),
+    listRecovery: sessionId => regionRecovery.list(sessionId),
+    removeRecovery: (sessionId, id) => regionRecovery.remove(sessionId, id),
+    retryRecovery: async (sessionId, id, signal) => {
+      const agent = ctx.get('agents')?.get(sessionId as NonNullable<GenerateOptions['sessionId']>)
+      const attachments = ctx.get('attachments') as AttachmentStore | undefined
+      if (!agent || !attachments) throw new Error('Open the session before retrying the saved request')
+      await regionRecovery.retry(sessionId, id, agent, attachments, regionGate, signal)
+    },
   })
 
   // OpenCode-style cadence: a startup check (five-minute cache freshness),
