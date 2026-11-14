@@ -20,6 +20,8 @@ export interface SubscriptionUsageBadgeInjected {
     } | undefined>;
     /** Render as a compact account-menu view instead of a composer dock badge. */
     surface?: 'dock' | 'account-menu';
+    /** Sidebar layout state for the account-menu launcher. */
+    wide?: boolean;
 }
 /** Props delivered by the dock or the independent sidebar launcher. */
 export type SubscriptionUsageBadgeProps = Partial<PropsRuntime<'conversation.composer.dock'>> & Partial<SubscriptionUsageBadgeInjected> & Partial<PropsLocale<'settings.subscriptions'>>;
@@ -89,7 +91,7 @@ type Translate = (key: SubscriptionsKey, params?: Record<string, unknown>) => st
  * every provider's accounts and their windows. Returns null when no data is
  * available.
  */
-export declare function SubscriptionUsageBadge({ rpc, currentModel, t, surface }: SubscriptionUsageBadgeProps): import("react").JSX.Element | null;
+export declare function SubscriptionUsageBadge({ rpc, currentModel, t, surface, wide }: SubscriptionUsageBadgeProps): import("react").JSX.Element;
 /** Preview each account independently; remaining visible quotas stay accessible. */
 export declare function AccountWindows({ windows, model, provider, translate }: {
     windows: readonly UsageWindow[];

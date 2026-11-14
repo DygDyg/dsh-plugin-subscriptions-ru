@@ -68,6 +68,8 @@ export interface SubscriptionUsageBadgeInjected {
   currentModel?: () => Promise<{ provider: string; model: string } | undefined>
   /** Render as a compact account-menu view instead of a composer dock badge. */
   surface?: 'dock' | 'account-menu'
+  /** Sidebar layout state for the account-menu launcher. */
+  wide?: boolean
 }
 
 /** Props delivered by the dock or the independent sidebar launcher. */
@@ -266,7 +268,7 @@ function usageWindowLabel(t: Translate, window: UsageWindow): string {
  * every provider's accounts and their windows. Returns null when no data is
  * available.
  */
-export function SubscriptionUsageBadge({ rpc, currentModel, t, surface = 'dock' }: SubscriptionUsageBadgeProps) {
+export function SubscriptionUsageBadge({ rpc, currentModel, t, surface = 'dock', wide = false }: SubscriptionUsageBadgeProps) {
   const translate: Translate = t ?? fallbackTranslate
   const dialogId = useId()
   const [displays, setDisplays] = useState<ProviderUsageDisplay[]>([])
@@ -479,7 +481,6 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t, surface = 'dock' 
   const collapsed = collapsedDisplays(displays, badgeSelection?.provider)
   const menuSurface = surface === 'account-menu'
   if (!menuSurface && (displayMode === 'hidden' || collapsed.length === 0)) return seat
-  if (menuSurface && displays.length === 0 && !usageLoading && !usageError) return null
 
   const label = collapsed.length > 0 ? compactSegment(collapsed[0]!, badgeSelection?.model, translate) : translate('usageTitle')
   // The dialog opens from the badge, so it follows the provider and model the
@@ -494,12 +495,20 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t, surface = 'dock' 
   }
 
   if (menuSurface) return (
-    <span ref={rootRef} style={styles.sidebarAnchor}>
+    <span ref={rootRef} style={{
+      ...styles.sidebarAnchor,
+      width: wide ? '100%' : 36,
+      height: 36,
+      justifyContent: wide ? 'flex-start' : 'center',
+    }}>
       <style>{sidebarUsageCss}</style>
-      <button type="button" className="dsh-subscription-sidebar-button" aria-label={translate('usageBadgeTitle')}
+      <button type="button" className="dsh-subscription-sidebar-button"
+        style={wide ? { width: '100%', justifyContent: 'flex-start', gap: 8, padding: '7px 10px' } : undefined}
+        aria-label={translate('usageBadgeTitle')}
         title={translate('usageBadgeTitle')} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? dialogId : undefined}
         onClick={toggle}>
         <UsageBadgeIcon />
+        {wide && <span>{translate('usageBadgeTitle')}</span>}
       </button>
       {open && createPortal(
     <section ref={panelRef} role="dialog" id={dialogId} aria-label={title} tabIndex={-1}
@@ -517,6 +526,12 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t, surface = 'dock' 
         </button>
       </header>
       {usageError && <p role="status" style={styles.menuHint}>{translate('usageMenuRefreshFailed')}</p>}
+      {menuSurface && displays.length === 0 && usageLoading && (
+        <p role="status" style={styles.menuHint}>{translate('usageLoading')}</p>
+      )}
+      {menuSurface && displays.length === 0 && !usageLoading && !usageError && (
+        <p role="status" style={styles.menuHint}>{translate('usageEmpty')}</p>
+      )}
       {expanded.map(display => (
         <section key={display.provider} style={styles.menuProvider}>
           <strong>{display.name}</strong>
@@ -720,7 +735,7 @@ const sidebarUsageCss = `
 `
 
 const styles: Record<string, CSSProperties> = {
-  sidebarAnchor: { display: 'flex', margin: '0 8px 4px', width: 32, flexShrink: 0 },
+  sidebarAnchor: { display: 'flex', alignItems: 'center', flexShrink: 0 },
   seat: { display: 'none' },
   anchor: { minWidth: 0, maxWidth: '100%', display: 'inline-flex' },
   menuSummary: { minWidth: 0, padding: '8px 12px', display: 'grid', gap: 8, fontSize: 12, lineHeight: '18px' },

@@ -241,10 +241,13 @@ export function apply(ctx: ClientContext): void {
     },
   }, ModelPicker))
 
-  // Add a quota button without replacing the shell's SINGLE profile launcher.
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay',
+  // Use the host's additive sidebar foot action slot instead of querying private
+  // sidebar DOM, which changed in DSH 0.2.2. The wide flag lets the launcher
+  // show a text label in the expanded sidebar and an icon in the collapsed rail.
+  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action',
     id: 'subscription-usage-launcher',
+    order: 0,
     locale: NS,
     inject: (): SubscriptionUsageBadgeInjected => ({ rpc: connection.rpc, surface: 'account-menu' }),
   }, SidebarUsageLauncher))

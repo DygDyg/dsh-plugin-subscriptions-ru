@@ -156,8 +156,12 @@ export function RegionGateSetting({ rpc, t }: RegionGateSettingProps) {
     setMessage(undefined)
   }
 
+  const selectedCodes = new Set(selected)
   const countryOptions = [...new Set([...REGION_COUNTRIES, ...selected])]
-    .sort((a, b) => displayCountry(a).localeCompare(displayCountry(b), undefined, { sensitivity: 'base' }))
+    .sort((a, b) => {
+      const selectedFirst = Number(selectedCodes.has(b)) - Number(selectedCodes.has(a))
+      return selectedFirst || displayCountry(a).localeCompare(displayCountry(b), undefined, { sensitivity: 'base' })
+    })
   const filteredCountries = countryOptions.filter(code => {
     const query = search.trim().toLocaleLowerCase()
     return query === '' || code.toLocaleLowerCase().includes(query) || displayCountry(code).toLocaleLowerCase().includes(query)
@@ -166,7 +170,7 @@ export function RegionGateSetting({ rpc, t }: RegionGateSettingProps) {
   const current = snapshot === undefined
     ? t('regionCurrentUnknown')
     : snapshot.country
-      ? t('regionCurrent', { country: snapshot.countryName ?? snapshot.country, ip: snapshot.ip ?? '—' })
+      ? t('regionCurrent', { country: displayCountry(snapshot.country), ip: snapshot.ip ?? '—' })
       : snapshot.error
         ? t('regionCheckFailed', { message: snapshot.error })
         : t('regionCurrentUnknown')
@@ -182,7 +186,7 @@ export function RegionGateSetting({ rpc, t }: RegionGateSettingProps) {
           : 'var(--dsw-alias-label-secondary)',
       }} role="status">
         {snapshot?.status === 'blocked'
-          ? t('regionBlockedNow', { country: snapshot.countryName ?? snapshot.country ?? '—' })
+          ? t('regionBlockedNow', { country: snapshot.country ? displayCountry(snapshot.country) : '—' })
           : current}
       </p>
       {!loaded && <p style={hint} role="status">{t('regionLoading')}</p>}

@@ -37,6 +37,16 @@ function fallbackT(key: SubscriptionsKey, vars?: Record<string, string | number>
   return text
 }
 
+function displayCountry(code: string): string {
+  try {
+    const language = typeof navigator === 'undefined' ? 'en' : navigator.language
+    const label = new Intl.DisplayNames([language], { type: 'region' }).of(code)
+    return label && label !== code ? `${label} (${code})` : code
+  } catch {
+    return code
+  }
+}
+
 const box: CSSProperties = {
   margin: '8px 0 0',
   padding: '8px 12px',
@@ -72,7 +82,7 @@ export function RegionGateNotice(props: RegionGateNoticeProps) {
   }, [rpc])
   if (snapshot === undefined || snapshot.status === 'allowed' || snapshot.status === 'unknown') return null
   if (snapshot.status !== 'error' && snapshot.blocked.length === 0) return null
-  const country = snapshot.countryName ?? snapshot.country ?? '—'
+  const country = snapshot.country ? displayCountry(snapshot.country) : snapshot.countryName ?? '—'
   const text = snapshot.status === 'blocked'
     ? t('composerRegionBlocked', { country })
     : t('composerRegionError', { message: snapshot.error ?? 'unknown' })

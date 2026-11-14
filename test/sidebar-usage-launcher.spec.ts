@@ -10,12 +10,25 @@ const registration = source('index.ts')
 const badge = source('SubscriptionUsageBadge.tsx')
 const launcher = source('SidebarUsageLauncher.tsx')
 
-test('quota contribution never replaces the single profile/settings launcher', () => {
+test('quota contribution uses the additive sidebar footer action slot', () => {
   assert.doesNotMatch(registration, /slots\.register\(\{\s*name: 'settings\.launcher'/)
-  assert.match(registration, /name: 'shell\.overlay',\s*id: 'subscription-usage-launcher'/)
-  assert.match(launcher, /footer\.prepend\(container\)/)
-  assert.match(launcher, /observer\.disconnect\(\)/)
-  assert.match(launcher, /container\.remove\(\)/)
+  assert.match(registration, /slots\.inject\('sidebar\.footer\.action'[\s\S]*?name: 'sidebar\.footer\.action',[\s\S]*?id: 'subscription-usage-launcher'/)
+  assert.doesNotMatch(registration, /name: 'shell\.overlay'/)
+  assert.doesNotMatch(launcher, /MutationObserver|document\.querySelector|createPortal/)
+  assert.match(launcher, /wide=\{wide\}/)
+})
+
+test('sidebar usage action stays labeled in the wide sidebar and accessible in the rail', () => {
+  assert.match(badge, /aria-label=\{translate\('usageBadgeTitle'\)\}/)
+  assert.match(badge, /title=\{translate\('usageBadgeTitle'\)\}/)
+  assert.match(badge, /wide && <span>\{translate\('usageBadgeTitle'\)\}<\/span>/)
+})
+
+test('sidebar launcher remains visible without usage data and reports loading or empty state', () => {
+  assert.doesNotMatch(badge, /if \(menuSurface && displays\.length === 0/)
+  assert.match(badge, /displays\.length === 0 && usageLoading/)
+  assert.match(badge, /displays\.length === 0 && !usageLoading && !usageError/)
+  assert.match(badge, /translate\('usageEmpty'\)/)
 })
 
 test('sidebar summary opens from an accessible button into a body portal', () => {
